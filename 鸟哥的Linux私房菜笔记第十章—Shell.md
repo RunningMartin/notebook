@@ -130,6 +130,6 @@ Hel:Hello:Hello martin
 - 编码文件位置：`/usr/bin/locale`
 - 修改编码：`/etc/locale.conf`
 - 主要参数
-  - `LANG`：系统默认语言，显示乱码的话可以设置为`en_US.UTF-8`或为空。
+  - `LANG`：系统默认语言，显示乱码的话可以设置为`en_US.UTF-8`、`zh_CN.UTF-8`或为空。
   - `LC_ALL`：国际化设置，用于设置时间格式、排序规则等。
 
