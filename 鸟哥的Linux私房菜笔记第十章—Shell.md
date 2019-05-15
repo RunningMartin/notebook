@@ -1,12 +1,5 @@
 # Shell
 
-## bash
-
-- 命令历史：`history`
-- 补全功能：`tab键`
-- 别名设置：`alias 别名='命令串'`，`alias myll='ls -al'`
-- 查看是否为内建命令：`type 命令`
-
 ## 变量定义
 
 - 定义：`变量名="值"`
@@ -122,14 +115,4 @@ Hel:Hello:Hello martin
 | `var=${str:=expr}` | `var=expr` `str=expr` | `var=expr` `str=expr` | `var=$str` |
 | `var=${str?expr}`  | `expr`输出到`stderr`  | `var=`                | `var=$str` |
 | `var=${str:?expr}` | `expr`输出到`stderr`  | `expr`输出到`stderr`  | `var=$str` |
-
-## 编码
-
-- 查看支持的编码：`locale -a`
-- 查看当前编码：`local`
-- 编码文件位置：`/usr/bin/locale`
-- 修改编码：`/etc/locale.conf`
-- 主要参数
-  - `LANG`：系统默认语言，显示乱码的话可以设置为`en_US.UTF-8`、`zh_CN.UTF-8`或为空。
-  - `LC_ALL`：国际化设置，用于设置时间格式、排序规则等。
 
