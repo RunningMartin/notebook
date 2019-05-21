@@ -4,8 +4,6 @@
 
 ## hello world
 
-- 编码
-
 ```c
 #include <stdio.h>
 
@@ -15,7 +13,9 @@ int main(void) {
 }
 ```
 
-- 进行编译\==>链接\==>运行后，你的显示器将会有`hello world`字符的显示。
+运行后，你的显示器将会有`hello world`字符的显示。
+
+![hello_world](图片/1/hello_world.png)
 
 ## 分析
 
@@ -24,7 +24,9 @@ int main(void) {
 - `#include<stdio.h>`：`include`为预处理器命令，预处理器会引入`stdio.h`的内容，详细了解请阅读后面的预处理器篇。这里使用`#include<stdio.h>`来引入`printf`的函数原型，通过这个函数能在显示器上显示信息。
 - `main`函数是一个十分特殊的函数，这个函数由操作系统调用，他是整个程序的入口。
 
-![hello_world](图片/hello_world.png)
+![hello_world](图片/1/main.png)
+
+- `{}`：标记函数体的起始位置。
 
 ## 总结
 
