@@ -240,15 +240,173 @@
 
 ## 视图
 
+- 是什么：视图是一个虚拟表，可以通过视图查看相应的数据，但本身不包含数据，因此每次使用视图都会进行一次检索，要注意性能问题。
+- 解决了什么问题：
+  - 重用SQL。
+  - 保护数据，通过视图只能访问表的部分数据。
+  - 简化SQL操作，不需要知道基本查询细节。
+  - 更改数据格式和表示，视图可自定义格式与表示。
+- 视图的规则
+  - 视图和表一样，名字唯一。
+  - 创建视图必须有足够的访问权限。
+  - 视图不能索引，也不能关联触发器或默认值。
+  - 视图中可以使用`ORDER BY`，但会被`SELECT`中的`ORDER BY`覆盖。
+- 操作
+  - 创建：`CREATE VIEW 视图 AS 查询语句;`
+  - 查看创建视图的语句：`SHOW CREATE VIEW 视图名;`
+  - 更新：可以对视图执行更新语句，更新视图将更新其基表，视图通常用于数据检索。
+    - 分组(`GROUP BY`和`HAVING`)
+    - 联结、子查询、并、聚集函数、计算列、使用了`DISTINCT`。
+    - 这些会导致`MySQL`不能正确更新基表，所以采用了这些的视图不支持更新。
+
 ## 存储过程
+
+- 是什么：存储过程是一系列`SQL`语句的集合。
+
+- 优点
+
+  - 封装简化调用，并有利于变动管理。
+  - 防止错误(步骤越多越容易出错)。
+  - 提高性能。
+  - 安全：创建权限和执行权限分离
+
+- 操作
+
+  - 创建：
+
+    ```mysql
+    CREATE PROCEDURE 名称()
+    BEGIN
+    	语句;
+    END；
+    
+    # 改变分隔符
+    DELIMITER //
+        CREATE PROCEDURE 名称()
+        BEGIN
+            语句;
+        END//
+    DELIMITER;
+    ```
+
+    - 使用命令行终端时，`;`被视作为语句的分隔符，因此会导致语法错误。可以使用`DELIMITER`临时改变风格符。
+    - 使用参数
+
+    ```mysql
+    # OUT代表输出 调用传参时用@变量，查看结果用SELECT @变量;，IN 代表输入
+    CREATE PROCEDURE 名称(OUT 变量 变量类型,IN 变量 变量类型)
+    BEGIN
+    	# INTO 将值传入变量
+    	SELECT MIN(price) INTO 变量;
+    END；
+    ```
+
+  - 调用：`CALL 名称(参数);`
+
+  - 删除：`DROP PROCEDURE IF EXISTS 名称;`
+
+  - 检查
+
+    - `SHOW CREATE PROCEDURE 名称;`
+    - `SHOW PROCEDURE STATUS LIKE '过滤'`：查看详细过程。
+
+- 智能存储过程
+
+```mysql
+CREATE PROCEDURE 名称(OUT 变量 变量类型,IN 变量 变量类型)
+BEGIN
+	DECLARE 变量名 类型 DEFAULT 默认值;
+	IF 变量 THEN
+		语句;
+	ELSEIF 条件 THEN
+		语句;
+	ELSE
+		语句;
+	END IF;
+END；
+```
 
 ## 游标
 
+- 游标用于指向检索出来的集合第几行，只能用于存储过程和函数。
+- 必须提前声明，使用前必须打开，使用后必须关闭。
+- 创建游标
+
+```mysql
+CREATE PROCEDURE 名称(OUT 变量 变量类型,IN 变量 变量类型)
+BEGIN
+	# 声明变量，在游标或句柄之前声明
+	DECLARE 游标名 CURSOR FOR 查询语句;
+	# 打开
+	OPEN 游标;
+	# 获取游标的值
+	FETCH 游标 INTO 变量;
+	# 声明句柄，必须在游标之后声明
+	# 当出现错误码02000时，将done设置为1 02000：没有更多的行。
+	DECLARE CONTINUE HANDLER FOR SQLSTATE '02000' SET done=1;
+	# 循环
+	REPEAT
+	# 语句
+	UNTIL 条件 END REPEAT;
+	# 关闭
+	CLOSE 游标;
+END；
+```
+
 ## 触发器
+
+- 什么是触发器：执行一个操作时，自动执行一系列操作，只支持表，其支持的操作有`UPDATE`、`INSERT`、`DELETE`。
+- 创建触发器
+
+```mysql
+CREATE TRIGGER 触发器 AFTER|BEFORE 操作 FOR EACH ROW 额外操作;
+```
+
+- 每个表每个事件每次只允许一个触发器，每个表最多支持6个触发器。
+- 触发器只能与单个表中关联。
+- 删除触发器：`DROP TRIGGER 触发器;`
+- `INSET`触发器
+  - 触发器中，允许通过虚拟表`NEW`访问被插入的行。
+  - `BEFORE`中，允许更新`NEW`中的值。
+  - `AUTO_INCREMENT`的列，插入之前值为`0`，执行`INSERT`后，更新值。
+  - 常用于数据检查
+- `UPDATE`触发器
+  - 触发器中，允许通过虚拟表`OLD`访问被删除的行。
+  - `OLD`中的数据只读。
+  - 可以用于归档。
+- `DELETE`触发器
+  - 触发器中，可以使用`OLD`访问旧值，`NEW`访问新值。
+  - `NEW`中的值可以修改，`OLD`中的数据只读。
+- 触发器可以用于保证数据的一致性(大小写、格式等)，还能用于创建审计(把修改记录下来)。但触发器不支持调用存储过程。
 
 ## 事务
 
-## 数据库维护
+- 事务用于维护数据库的完整性，他能保证一批`MySQL`操作要么都执行，要么都不执行，中途出错，会进行回滚操作。
+- 不是所有的存储引擎都支持事务：`MyISAM`不支持事务，`InnoDB`不支持事务。
+- 核心
+  - 事务(transaction)：一组`SQL`语句。
+  - 回退(rollback)：撤销指定的`SQL`语句。
+  - 提交(commit)：将未存储的`SQL`结果写入数据库。
+  - 保留点(savepoint)：事务中设置的临时占位符，可以进行回退。
+- 操作：只能针对`DELETE`、`INSERT`、`UPDATE`
+  - 启动事务：`START TRANSACTION;`
+  - 回退事务：`ROLLBACK;`回退之前的操作。`ROLLBACK TO 保留点`
+  - 提交：`COMMIT;`
+  - 隐性事务关闭：`COMMIT`或`ROLLBACK`后，会自动关闭。
+  - 设置保留点：`SAVEPOINT 保留点名;`，释放保留点：`RELEASE SAVEPOINT 保留点;`，`COMMIT`或`ROLLBACK`后，会自动释放。
+  - 自动提交操作：`SET autocommit=0;`，针对表，若设置了自动提交则没有`COMMIT`也会提交。
+
+## 全球化与本地化
+
+- 概念
+  - 字符集：所有字符的集合
+  - 编码：字符集成员的内部表示。
+  - 校对：规定字符之间如何进行比较，用于排序和等值判断。
+- 查看字符集：`SHOW CHARACTER SET;`
+- 查看校对：`SHOW COLLATION;`
+- 定义数据表或数据时可用`CHARACTER SET 字符集`和`COLLATION 校对`设置字符集与校对。
+- `MySQL`中的`utf8`不是真`utf8`，真`utf8`为`utf8mb4`，`utf8`是采用3字节)
 
 ## 性能
 
+- http://dev.mysql.com/doc/
