@@ -1,0 +1,72 @@
+# SQL 知识图谱
+
+- 查询
+  - 数据过滤
+    - 比较运算符
+    - 等值判断：>|<|=|<=|!=|>=
+    - 范围判断：BETWEEN a AND b
+    - 空值判断：IS NULL
+  - 逻辑运算符
+    - 与：AND
+    - 或：OR
+    - 非：NOT
+    - 范围：IN (可能性)
+  - SQL函数
+    - 目的
+      - 提高代码效率
+      - 提高可维护性
+    - 缺点：可移植性不强
+    - 算术函数
+      - ABS(数据)
+      - ROUND(数据,小数点位数
+    - 字符串函数
+      - CONTACT(字符串1,字符串2,...)
+      - LENGTH(字符串)
+      - CHAR_LENGTH(字符串)
+      - LOWER(字符串)
+      - UPPER(字符串)
+      - REPLACE(字符串,目标串,结果串)
+  - 日期函数
+    - 当前时间
+      - CURRENT_DATE()
+      - CURRENT_TIME()
+      - CURRENT_TIMESTAMP()
+    - 时间处理
+      - DATE(时间)
+      - TIME(时间)
+      - YEAR(时间)
+      - MONTH(时间)
+      - DAY(时间)
+      - HOUR(时间)
+      - MINUTE(时间)
+      - SECOND(时间)
+      - EXTRACT(类型 FROM 时间字符串)
+    - 转换函数
+      - CAST(数据 AS 类型)
+      - CONVERT(数据 USING 类型)
+    - 聚集函数
+      - COUNT()
+      - MAX()
+      - MIN()
+      - SUM()
+      - AVG()
+      - DISTINCT
+  - 分组
+    - 分组：GROUP BY 数据
+    - 过滤：HAVING 条件
+  - 子查询
+    - 关联子查询
+    - 非关联子查询
+    - 运算
+      - EXISTS
+      - 等值判断
+      - IN
+      - ANY
+      - ALL
+    - IN和EXISTS
+    - NOT IN和NOT EXISTS
+    - 连接类型
+      - 哈希连接
+      - 循环连接
+      - 合并连接
+
