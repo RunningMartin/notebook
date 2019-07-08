@@ -1,0 +1,58 @@
+# fRedis学习笔记—基本数据结构
+
+基本数据结构
+
+
+
+- Redis中所有数据结构都是Key-Value形式，不同的数据结构的差异在Value的结构。
+- 字符串
+  - 结构：Value为动态字符串，界限为1M，小则备增，大则+1M，最大512M
+  - 操作
+    - 添加：set|mset|setnx 键 值
+    - 查询：get|mget 键
+    - 删除：del 键
+    - 是否存在：exists 键
+    - 设置过期时间：expire 键 timeout|setex 键 timeout 值
+  - 应用场景：搭配序列化与反序列化缓存用户信息。
+- 列表
+  - 结构：元素少则用`ziplist`，多则用`quicklist`将多个`ziplist`变为双向列表
+  - 操作
+    - 添加元素：rpush|lpush 列表 元素
+    - 获取元素：rpop|lpop 列表
+    - 长度：llen 列表名
+    - 按序取值：lindex 列表名 索引
+    - 获取一段元素：lrange 列表名 起始索引 结束索引
+    - 定义区间：ltrim 列表名 起始索引 结束索引
+  - 应用场景：异步队列
+- 哈希
+  - 结构：无序字典，采用数组+链表的二维结构，数组存hash值，链表存碰撞元素
+  - 操作
+    - 添加元素：hset|hmset 字典名 键 值
+    - 获取所有元素：hgetall 字典名
+    - 长度：hlen 字典名
+    - 增量：hincrby 字典名 键 increase
+  - 应用场景：将用户信息按属性存储。
+
+- 集合
+  - 结构：特殊字典，字典的value值为NULL，保证键的唯一性。
+  - 操作
+    - 添加：sadd 集合名 元素
+    - 查看所有元素：smembers 集合名
+    - 存在与否：sismember 集合名 元素
+    - 长度：scard 集合名
+    - 获取一个元素：spop 集合名
+  - 应用场景：元素去重
+- 有序集合
+  - 结构：采用跳表实现，集合中每个元素有排序权重score
+  - 操作：
+    - 添加元素：`zadd 集合名 权重 元素`
+    - 顺序排序：`zrange 集合名 起始位置 结束位置`
+    - 倒序排序：`zrevrange 集合名 起始位置 结束位置`
+    - 统计：`zcard 集合名`
+    - 获取权重：`zscore 集合名 元素`
+    - 获得排名：`zrank 集合名 元素`
+    - 获得权重范围内的元素：`zrangebyscore 集合名 起始权重 结束权重`
+    - 带权重信息：`zrangebyscore 集合名 起始(inf代表无穷大) 结束 withscores`
+    - 删除元素：`zrem 集合 元素`
+  - 应用场景：排行榜
+
