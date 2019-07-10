@@ -205,5 +205,12 @@ print(client.zrank('like', 'fangjie'))
 
 Redis中所有的数据结构都支持设置过期时间，Redis会自动删除过期的对象。当对对象进行修改后，过期时间会消失。
 - 操作：
-    - 设置过期时间：expire 对象 时间
-    - 查看过期时间：ttl 对象
+    - 设置过期时间(秒级)：expire 对象 时间
+    - 查看过期时间(秒级)：ttl 对象
+    - 设置过期时间(毫秒级)：pexpire 对象 时间
+    - 查看过期时间(毫秒级)：pttl 对象
+
+## 学习资料
+
+- 掘金小册：《Redis 深度历险：核心原理与应用实践》
+- Redis命令参考：http://redisdoc.com
