@@ -164,34 +164,181 @@ PubSub模式有一个缺点：当消费者重连后，这段时间内生产者�
 
 通过创建一个消息链表，将所有的消息串联起来，并为每个消息添加一个ID，一个Stream支持多个消费者组，每个消费者组通过游标`last_delivered_id`用于标记该消费者组消费到哪条消息。同一个消费者组中消费者之间存在竞争关系，任意一个消费者读取消息都会导致消费者组的`last_delivered_id`前移。消费者内维护`pending_ids`，记录当前客户端读取，但是未ack的消息ID，用于确保消息不会因网络传输丢失而没处理。消息ID的形式为` timestampInMillis-sequence`，消息的内容为键值对。
 
-支持命令
+消费者通过`pending_ids`维护正在处理的消息ID列表PEL，若消费者处理完消息后没有ack，PEL列表不断增长。
 
-- 添加消息：`xadd stream名称 ID(*表示自动生成) key1 value1 key1 value1`
-- 删除消息：`xdel stream名称 消息ID `，只是置标志位，不会影响消息总长度。
-- 获取消息列表：`xrange stream命令 起始ID(最小值：-) 结尾ID(最大值：+)`，会过滤已经删除的
-- 消息长度：`xlen stream名称`
-- 删除stream：`del stream名称`
-- 独立消费：`xread 指令 streams 名称1 名称2 起始ID`，没有消费组的情况下进行消费。
-  - `count 数量`：限制读取的数量
-  - `block 时间`：阻塞超时时间，0则一直阻塞
-  - `0-0`：最开始位置
-  - `$`：从尾部开始，只接受新消息
-- 创建消费组：`xgroup create stream名称 消费组 起始ID`
-- 查看流信息：`xinfo stream 流名称`
-- 查看消费组信息：`xinfo groups 流名称`
-- 查看消费者信息：`xinfo consumers 流名称 消费组`
-- 消费信息：`xreadgroup GROUP 消费者组 消费者 指令 streams 流名称 >`
-  - `count 数量`
-  - `block 时间`：阻塞超时时间，0则一直阻塞
-- ack消息：` xack 流名称 消费者组 消息ID`
+![stream—PEL](Raw/原理/stream—PEL.png)
 
-定长Stream：`xadd 流名称 maxlen 长度 id key1 value1`，能清理就消息
+通过PEL列表，当客户端断开重连后，可以通过`xreadgroup 0-0`指令能再次读取PEL列表中的消息以及`last_delivered_id`之后的新消息。
 
-Stream在每个消费者结构中保存了正在处理的消息ID列表PEL，如果消费者收到再消息处理完但没有ack，会导致PEL列表不断增长。当消费者读取流消息时，服务器将消息回复给客户端的过程中，客户端断开链接后，重连上，能再次收到PEL中的消息列表，但此时`xreadgroup`的起始ID不能为`>`，应该为有效的消息ID，通常为`0-0`,读取PEL消息以及last_delivered_id之后的新消息。
+stream的高可用建立在主从复制的基础上，但Redis的复制是异步执行的，因此可能会丢失部分数据。Redis还能通过分配多个stream来实现分区，客户端采用一定的策略(哈希)将生产的消息发送到不同的stream中，实现负载均衡。
 
-##### 高可用性
+与stream相关命令有：
 
-Stream的高可用建立在主从复制的基础上，但是复制是异步的，因此可能会丢失部分数据。Redis可以通过分配多个Stream来实现分区，客户端采用一定的策略将生产的消息发送到不同的stream中。
+- 流管理
+  - 添加消息：`xadd 流 消息ID(*代表自动) 键 值`
+  - 定长stream：`xadd 流 maxlen 长度 ID 键 值`
+  - 删除消息：`xdel 流 消息ID(只设置标志位)`
+  - 独立消费消息：`xread 指令 streams 流 起始ID(0-0代表从头，$代表从尾部开始接收新消息)`
+    - `count 数量`：指定消费数量
+    - `block 时间(毫秒)`：阻塞超时时间，`0`为一直阻塞
+  - 删除流：`del 流`
+
+  - 获取消息列表：`xrange 流 起始ID 结束ID(过滤已被删除的消息，-代表开始 +代表结尾)`
+  - 消息长度：`xlen 流(包含被删元素)`
+  - 查看流信息：`xinfo stream 流`
+
+- 消费者组管理
+
+  - 创建消费者组：`xgroup create 流 组 消费起始序号(0-0代表从头，$代表从尾部开始接收新消息)`
+  - 查看消费者组信息：`xinfo groups 流`
+  - 查看消费者信息：`xinfo consumers 流 组`
+  - 消费信息：`xreadgroup GROUP 组 消费者 指令 streams 流 >`
+    - `count 数量`：指定消费数量
+    - `block 时间(毫秒)`：阻塞超时时间，`0`为一直阻塞
+  - ack消息：` xack 流 组 消息ID`
+
+命令行实战：
+
+```bash
+# 添加消息
+127.0.0.1:6379> xadd users * name martin age 24
+"1562814476559-0"
+127.0.0.1:6379> xadd users * name kevin age 26
+"1562814492173-0"
+127.0.0.1:6379> xadd users * name elune age 24
+"1562814503526-0"
+# 查看消息长度
+127.0.0.1:6379> xlen users
+(integer) 3
+# 获取消息列表
+127.0.0.1:6379> xrange users - +
+1) 1) "1562814476559-0"
+   2) 1) "name"
+      2) "martin"
+      3) "age"
+      4) "24"
+2) 1) "1562814492173-0"
+   2) 1) "name"
+      2) "kevin"
+      3) "age"
+      4) "26"
+3) 1) "1562814503526-0"
+   2) 1) "name"
+      2) "elune"
+      3) "age"
+      4) "24"
+# 查看流信息      
+127.0.0.1:6379> xinfo stream users
+ 1) "length"
+ 2) (integer) 3
+ 3) "radix-tree-keys"
+ 4) (integer) 1
+ 5) "radix-tree-nodes"
+ 6) (integer) 2
+ 7) "groups"
+ 8) (integer) 0
+ 9) "last-generated-id"
+10) "1562814503526-0"
+11) "first-entry"
+12) 1) "1562814476559-0"
+    2) 1) "name"
+       2) "martin"
+       3) "age"
+       4) "24"
+13) "last-entry"
+14) 1) "1562814503526-0"
+    2) 1) "name"
+       2) "elune"
+       3) "age"
+       4) "24"
+# 独立消费消息
+127.0.0.1:6379> xread count 1 streams users 0-0
+1) 1) "users"
+   2) 1) 1) "1562814476559-0"
+         2) 1) "name"
+            2) "martin"
+            3) "age"
+            4) "24"
+# 创建消费者组
+127.0.0.1:6379> xgroup create users client 0-0
+OK
+# 查看消费者组信息
+127.0.0.1:6379> xinfo groups users
+1) 1) "name"
+   2) "client"
+   3) "consumers"
+   4) (integer) 0
+   5) "pending"
+   6) (integer) 0
+   7) "last-delivered-id"
+   8) "0-0"
+# 消费者消费消息
+127.0.0.1:6379> xreadgroup GROUP client client_1 count 1 streams users >
+1) 1) "users"
+   2) 1) 1) "1562814476559-0"
+         2) 1) "name"
+            2) "martin"
+            3) "age"
+            4) "24"
+# ack消息
+127.0.0.1:6379> xack users client 1562814476559-0
+(integer) 1
+127.0.0.1:6379> xreadgroup GROUP client client_1 count 1 streams users >
+1) 1) "users"
+   2) 1) 1) "1562814492173-0"
+         2) 1) "name"
+            2) "kevin"
+            3) "age"
+            4) "26"
+127.0.0.1:6379> xreadgroup GROUP client client_1 count 1 streams users >
+1) 1) "users"
+   2) 1) 1) "1562814503526-0"
+         2) 1) "name"
+            2) "elune"
+            3) "age"
+            4) "24"
+# 查看消费者信息
+127.0.0.1:6379> xinfo consumers users client
+1) 1) "name"
+   2) "client_1"
+   3) "pending"
+   4) (integer) 2
+   5) "idle"
+   6) (integer) 57623
+```
+
+Python实战：
+
+```python
+import redis
+
+pool = redis.ConnectionPool(host='localhost', port='6379')
+client = redis.StrictRedis(connection_pool=pool)
+users = [
+    {
+        'name': 'martin',
+        'age': 24
+    },
+    {
+        'name': 'kevin',
+        'age': 26
+    },
+    {
+        'name': 'elune',
+        'age': 24
+    }
+]
+for user in users:
+    client.xadd(name='users', fields=user, id='*')
+
+client.xgroup_create(name='users', groupname='clients', id='0-0')
+print(client.xreadgroup(groupname='clients', consumername='client_1', count=1,
+                        streams={'users': '>'}))
+print(client.xreadgroup(groupname='clients', consumername='client_1', count=1,
+                        streams={'users': '>'}))
+print(client.xreadgroup(groupname='clients', consumername='client_1', count=1,
+                        streams={'users': '>'}))
+```
 
 ## 小对象压缩
 
