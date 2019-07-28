@@ -334,3 +334,68 @@ assert client.bitfield('data').get('u8', 0).execute() == [0]
 client.delete('data')
 ```
 
+## HyperLogLog
+
+## 布隆过滤器
+
+布隆过滤器通常用于解决去重问题，如：垃圾邮件过滤、防止缓存穿透(访问不存在的数据时，每次都会去访问数据库，而不会访问缓存)。布隆过滤器只能精确的判断值不存在，但是对值存在可能会出现误判。
+
+### 安装
+
+```bash
+# 拉取镜像
+➜  Desktop docker pull redislabs/rebloom
+# 创建容器
+➜  Desktop docker run -d -p 6379:6379 --name bloomfilter redislabs/rebloom
+# 启动交互平台
+➜  Desktop docker exec -it bloomfilter redis-cli
+```
+
+### 常用指令
+
+- 显示创建：`bf.reserve key error_rate initial_size`
+  - `error_rate`：错误率越低，需要的空间越大，默认值`0.01`。
+  - `initial_size`：预计放入元素数量，当实际数量超过时，误判率会上升，默认值`100`。
+- 添加元素：`bf.add|bf.madd  key value`
+- 判断元素是否存在：`bf.exists|bf.mexists key value`
+
+### Python使用布隆过滤器
+
+```python
+import redis
+
+client = redis.StrictRedis(host='localhost', port='6379')
+# 添加用户
+user_number = 10000
+not_include = 0
+
+for i in range(user_number):
+    client.execute_command('bf.add', 'users', f'user_{i}')
+    ret = client.execute_command('bf.exists', 'users', f'user_{i + 1}')
+    if ret == 1:
+        not_include += 1
+
+print(
+    f"共计：{user_number}，实际误判：{not_include}，误判率：{not_include * 100 / user_number}%")
+
+client.delete('users')
+```
+
+### 原理
+
+布隆过滤器的数据结构时一个位数组，其原理是采用计算元素的hash值，然后将位数组对应的位置设置为1，因此可以通过位数组来判断元素是否已经存在。计算哈希时会出现hash冲突，因此可以通过设置多个位+多个hash函数来降低hash冲突的概率，同一个元素的对应的多个位有一位不为`1`，则元素不存在。
+
+![](Raw/应用/布隆过滤器.png)
+
+使用时不要让实际元素数量远大于初始化大小(错误率会上升)，应该重新分配一个更大的过滤器。
+
+布隆过滤器的空间占用估计公式：
+
+- $k=0.7*(l/n)$：$k$为hash函数数量，$l$为位数组长度，$n$为预计元素数量。
+- $f=0.6185^{(l/n)}$：$f$为误判率。
+
+实际元素数量超出时，误判率变化公式：
+
+- $f=(1-0.5^t)^k$：$t$为实际元素和预计元素倍数。
+
+![](Raw/应用/误判率变化曲线.png)$k$值分别为错误率为$10.0\%、1\%、0.1\%$时。
