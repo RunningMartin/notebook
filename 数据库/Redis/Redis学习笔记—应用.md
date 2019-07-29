@@ -336,6 +336,170 @@ client.delete('data')
 
 ## HyperLogLog
 
+当需要统计一个页面的**UV(Unique visitor)**时，需要根据访问用户的ID对页面的访问进行去重，这时有两种解决方案：
+
+- 为每个页面添加一个**set**用于去重，当访问量很大时，会浪费很多空间。
+- 利用Redis的HyperLogLog数据结构，提供不精确的统计。
+
+HyperLogLog 提供两个指令：
+
+- `pfadd key element`：添加记录
+- `pfcount key`：获得计数。
+- `pfmerge  key key`：将多个pf计数值累计。
+
+```python
+import redis
+
+client = redis.StrictRedis(host='127.0.0.1', port=6379)
+total = 100000
+for i in range(total):
+    client.pfadd('counter', i)
+now = client.pfcount('counter')
+print("精确访问量：{}\n 实际访问量：{} \n 误差{}%".format(
+    total, now, (total - now) * 100 / total)
+)
+
+client.delete('counter')
+```
+
+### 实现原理
+
+Redis对HyperLogLog的存储进行了优化，当计数很小时，采用稀疏矩阵存储，空间占用小，只有当计数较大时，才会采用稠密矩阵存储，占用12K的空间。
+
+![HyperLogLog实现原理]()
+
+HyperLogLog是给定的一系列随机整数，通过低位连续零位最大长度K来估算随机数的数量N。N和K之间的关系为：
+
+```python
+import math
+import random
+
+
+# 算低位零的个数
+def low_zeros(value):
+    for i in range(1, 32):
+        if value >> i << i != value:
+            break
+    return i - 1
+
+
+# 通过随机数记录最大的低位零的个数
+class BitKeeper(object):
+    def __init__(self):
+        self.maxbits = 0
+
+    def random(self):
+        value = random.randint(0, 2 ** 32 - 1)
+        bits = low_zeros(value)
+        if bits > self.maxbits:
+            self.maxbits = bits
+
+
+class Experiment(object):
+    def __init__(self, n):
+        self.n = n
+        self.keeper = BitKeeper()
+
+    def do(self):
+        for i in range(self.n):
+            self.keeper.random()
+
+    def debug(self):
+        print(
+            f"总数N为：{self.n} log2N为：{math.log(self.n, 2):0.2f}, 低位连续零最大长度为：{self.keeper.maxbits}")
+
+
+for i in range(100000, 1000000, 100000):
+    exp = Experiment(i)
+    exp.do()
+    exp.debug()
+    
+"""
+总数N为：100000 log2N为：16.61, 低位连续零最大长度为：17
+总数N为：200000 log2N为：17.61, 低位连续零最大长度为：18
+总数N为：300000 log2N为：18.19, 低位连续零最大长度为：19
+总数N为：400000 log2N为：18.61, 低位连续零最大长度为：19
+总数N为：500000 log2N为：18.93, 低位连续零最大长度为：21
+总数N为：600000 log2N为：19.19, 低位连续零最大长度为：18
+总数N为：700000 log2N为：19.42, 低位连续零最大长度为：17
+总数N为：800000 log2N为：19.61, 低位连续零最大长度为：18
+总数N为：900000 log2N为：19.78, 低位连续零最大长度为：23
+"""
+```
+
+通过测试，可以看到K与N之间近似满足：$K=log_2(N)$。
+
+- 统计
+
+```python
+import math
+import random
+
+
+def low_zeros(value):
+    for i in range(1, 32):
+        # 先右移再左移，左移时补充的是0，所以有1时，移动后值会变化
+        if (value >> i) << i != value:
+            break
+    return i - 1
+
+class BitKeeper(object):
+    def __init__(self):
+        self.maxbits = 0
+
+    def random(self, value):
+        bits = low_zeros(value)
+        if bits > self.maxbits:
+            self.maxbits = bits
+
+class Experiment(object):
+    def __init__(self, n, k=1024):
+        self.n = n
+        self.k = k
+        self.keepers = [BitKeeper() for _ in range(k)]
+
+    def do(self):
+        for _ in range(self.n):
+            value = random.randint(1, 1 << 32 - 1)
+            # 取高16位，采用1024个桶
+            keeper = self.keepers[
+                ((value & 0xfff0000) >> 16) % len(self.keepers)]
+            keeper.random(value)
+
+    def estimate(self):
+        sumbits_inverse = 0  # 零位数倒数
+        #  计算调和平均(倒数的平均=总数/倒数之和
+        # 调和平均可以有效平滑离群值的影响
+        for keeper in self.keepers:
+            if keeper.maxbits == 0:
+                sumbits_inverse += keeper.maxbits
+            else:
+                sumbits_inverse += 1.0 / float(keeper.maxbits)
+
+        avgbits = float(self.k) / sumbits_inverse  # 调和平均零位数
+
+        return (2 ** avgbits) * self.k  # 根据桶的数量对估计值进行放大
+
+for i in range(100000, 1000000, 100000):
+    exp = Experiment(i)
+    exp.do()
+    est = exp.estimate()
+    print(f"实际值:{i},预测值:{est:.2f},误差:{(abs(est - i)*100 / i):.5f}%")
+"""
+实际值:100000,预测值:92411.78,误差:7.58822%
+实际值:200000,预测值:188961.64,误差:5.51918%
+实际值:300000,预测值:295064.79,误差:1.64507%
+实际值:400000,预测值:391421.11,误差:2.14472%
+实际值:500000,预测值:492969.06,误差:1.40619%
+实际值:600000,预测值:627868.13,误差:4.64469%
+实际值:700000,预测值:693719.51,误差:0.89721%
+实际值:800000,预测值:794618.48,误差:0.67269%
+实际值:900000,预测值:939156.95,误差:4.35077%
+"""
+```
+
+Redis中采用了`2^14=16384`个桶，每个桶的最大maxbits占6bit，最大可表示`maxbits=63`，因此总占用内存`2^14 * 6 / 8 = 12k `。
+
 ## 布隆过滤器
 
 布隆过滤器通常用于解决去重问题，如：垃圾邮件过滤、防止缓存穿透(访问不存在的数据时，每次都会去访问数据库，而不会访问缓存)。布隆过滤器只能精确的判断值不存在，但是对值存在可能会出现误判。
