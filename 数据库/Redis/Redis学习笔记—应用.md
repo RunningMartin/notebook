@@ -564,3 +564,58 @@ client.delete('users')
 
 ![](Raw/应用/误判率变化曲线.png)
 $k$值分别为错误率为$10.0\%、1\%、0.1\%$时。
+
+## 限流
+
+### 简单限流
+
+### 漏斗限流
+
+漏斗限流的灵感来自于漏斗。
+
+![](Raw/应用/漏斗算法灵感.png)
+
+漏斗的容量是固定的，其代表当前行为的可持续进行的最大量，漏嘴的流水率代表当前行为的最大频率。因此，单机漏斗算法：
+
+```python
+import time
+
+class Funnel(object):
+    def __init__(self, capacity, leaking_rate):
+        self._capacity = capacity
+        self._leaking_rate = leaking_rate
+        # the remaining space
+        self._left_quota = capacity
+        # the last leaking time
+        self._leaking_ts = time.time()
+
+    def make_space(self):
+        """trigger space transformation"""
+        now_ts = time.time()
+        delta_ts = now_ts - self._leaking_ts
+        delta_quota = delta_ts * self._leaking_rate
+        if delta_quota < 1:
+            return
+        self._left_quota += delta_quota
+        self._leaking_ts = now_ts
+        if self._left_quota > self._capacity:
+            self._left_quota = self._capacity
+
+    def watering(self, quota):
+        self.make_space()
+        if self._left_quota > quota:
+            self._left_quota -= quota
+            return True
+        return False
+
+funnels = {}
+
+def is_action_allowed(user_id, action_key, capacity, leaking_rate):
+    key = f'{user_id}:{action_key}'
+    funnel = funnels.get(key)
+    if not key:
+        funnel = Funnel(capacity, leaking_rate)
+    return funnel.watering(1)
+```
+
+在分布式的漏斗算法实现时，可以将`Funnel`的字段存储到一个`hash`结构中，灌水时将字段读出后，回填新值。在这个过程中，无法保证原子性，因此必须对取值、计算和回填这三个过程加锁，这意味着加锁失败后需要重试或放弃，导致性能下降或影响用户体验。可以采用`Redis-Cell`
