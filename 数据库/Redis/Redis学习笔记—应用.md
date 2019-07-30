@@ -652,4 +652,15 @@ def is_action_allowed(user_id, action_key, capacity, leaking_rate):
     return funnel.watering(1)
 ```
 
-在分布式的漏斗算法实现时，可以将`Funnel`的字段存储到一个`hash`结构中，灌水时将字段读出后，回填新值。在这个过程中，无法保证原子性，因此必须对取值、计算和回填这三个过程加锁，这意味着加锁失败后需要重试或放弃，导致性能下降或影响用户体验。可以采用`Redis-Cell`
+在分布式的漏斗算法实现时，可以将`Funnel`的字段存储到一个`hash`结构中，灌水时将字段读出后，回填新值。在这个过程中，无法保证原子性，因此必须对取值、计算和回填这三个过程加锁，这意味着加锁失败后需要重试或放弃，导致性能下降或影响用户体验。可以采用`Redis-Cell`模块，其支持的指令为`cl.throttle key 容量 数量 时间 本次申请数量`，漏斗的漏水速度为`数量/时间`。
+
+```bash
+# 15 容量 30/60(s) 漏水数率
+> cl.throttle laoqian:reply 15 30 60
+1) (integer) 0 # 0 表示允许， 1 表示拒绝
+2) (integer) 15 # 漏斗容量 capacity
+3) (integer) 14 # 漏斗剩余空间 left_quota
+4) (integer) -1 # 如果拒绝了，需要多长时间后再试(漏斗有空间了，单位秒)
+5) (integer) 2 # 多长时间后，漏斗完全空出来(left_quota==capacity，单位秒)
+```
+
