@@ -566,8 +566,42 @@ client.delete('users')
 $k$值分别为错误率为$10.0\%、1\%、0.1\%$时。
 
 ## 限流
+限流通常用于控制流量(系统处理能力有限时，限制访问流量)和控制用户行为，避免垃圾请求(限制用户的某种行为在规定时间内的次数)。
 
 ### 简单限流
+
+简单限流一般用于限定用户的某个行为在指定时间内最多只能发生N次(不能太大)。在Redis中，可以通过`zset`实现一个滑动时间窗口：`score`用于记录行为发生的时间，通过`zremrangebyscore `指令可以删除时间窗口之外的数据，通过`zcard`可以获得窗口之内的行为数量。这里有一点需要：要防止冷用户(规定时间范围内没有发生该动作)的`zset`占用内存，因此可以更新一下该`zset`的过期时间，时间设置为窗口长度`+1s`。
+
+```python
+import time
+import redis
+import uuid
+
+client = redis.StrictRedis(host='localhost', port='6379')
+
+def is_action_allowed(user_id, action_key, period, max_count):
+    key = 'hist:%s:%s' % (user_id, action_key)
+    now_ts = int(time.time() * 1000)  # 毫秒时间戳
+    with client.pipeline() as pipe:  # client 是 StrictRedis 实例
+        # 记录行为
+        pipe.zadd(key, {str(uuid.uuid4()): now_ts})  # value 和 score 都使用毫秒时间戳
+        # 移除时间窗口之前的行为记录，剩下的都是时间窗口内的
+        pipe.zremrangebyscore(key, 0, now_ts - period * 1000)
+        # 获取窗口内的行为数量
+        pipe.zcard(key)
+        # 设置 zset 过期时间，避免冷用户持续占用内存
+        # 过期时间应该等于时间窗口的长度，再多宽限 1s
+        pipe.expire(key, period + 1)
+        # 批量执行
+        a, b, current_count, _ = pipe.execute()
+        # 比较数量是否超标
+        return current_count <= max_count
+
+for i in range(20):
+    print(is_action_allowed("laoqian", "reply", 60, 5))
+```
+
+简单限流策略不适用于行为发生次数很大时的应用，因为会消耗大量存储空间。
 
 ### 漏斗限流
 
