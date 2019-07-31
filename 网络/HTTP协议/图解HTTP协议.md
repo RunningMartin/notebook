@@ -121,12 +121,27 @@ HTTP的首部字段用于在客户端和服务器端传递额外信息，如：�
   - 相对优先级：`zh-cn,zh;q=0.2`。
 - `Authorization`：用户认证信息。
 - `Except`：期待服务器的行为，格式为`状态码-状态注释`，如`100-continue`。
-- `From`：
-- `Host`：
+- `Host：域名`：请求的主机名，避免同一个IP上有多个域名。
+- `Range:bytes=5001-10000`：获取该资源的第`5001`字节到`10000`字节部分。
+- `Referer:URIA`：当前的请求是从`URIA`页面发起的。
+- `User-Agent:browser-info`：创建当前请求的浏览器的信息为`browser-info`。
+
+#### 条件请求
+
+- `If-Match:EtagA`：只有当EtagA的值与资源的Etag向匹配才会执行请求，否则返回412 Precondition Failed响应。ETagA值为`*`时，忽视ETag值。
+- `If-Not-Match:EtagA`：如果资源的Etag值与EtagA不相等，则处理该请求，通常用于获取最新资源。
+- `If-Modified-Since:dataA`：如果资源在dataA之后又更新，服务器才处理请求，否则返回304 Not Modified响应，常用于确认缓存的资源的有效性。
+- `If-Unmodified-Since:dataA`：当资源在dataA之后没有更新，服务器才处理请求。
+- `If-Range:EtagA或dataA`：如果资源的Etag值等于EtagA或时间等于DateA，则处理该范围请求，否则返回整个资源，与`Range`联用。
 
 ### 响应首部
 
-- `Accept-Ranges`：告知客户端自己是否能处理范围请求，`Accept-Ranges:none`为不能处理范围请求，`Accept-Ranges:bytes`为能处理范围请求。
+- `Accept-Ranges`：告知客户端自己是否能处理范围请求，`Accept-Ranges:none`表示不能处理范围请求，`Accept-Ranges:bytes`表示能处理范围请求。
+- `Age:[秒]`：告知源服务器在多久之前创建了响应。
+- `ETag`：服务器为每份资源创建的标签值，当资源更新，标签也会更新。
+- `Location`：提供重定向的URI。
+- `Retry-After`：多久之后重试，用于配合503状态码，值可以为RFC1123格式的时间或秒数。
+- `Server`：用于告知服务器上安装的HTTP服务器程序的信息，如`Server:nginx/1.8.1`。
 
 ### 实体首部
 
@@ -139,3 +154,10 @@ HTTP的首部字段用于在客户端和服务器端传递额外信息，如：�
 - `Content-Type`：实体的媒体类型，如`Content-Type:text/html;charset=UTF-8`。
 - `Expire`：资源的过期时间，时间格式为RFC1123。
 - `Last-Modified`：资源最近一次修改时间，时间格式为RFC1123。
+
+### Cookie
+
+HTTP协议是无状态协议(减少内存和CPU消耗)，不记录之前发生的请求和响应，因此跳转页面后，必须重新登录或者通过参数来管理登录状态。为了解决该问题，引入了Cookie技术，通过在请求和响应中添加Cookie，来控制客户端的状态。
+
+客户端第一次发起请求时，没有Cookie，服务器端会通过响应中的`Set-Cookie`字段来通知客户端保存Cookie。下一次请求时，客户端通过请求中`Cookie`字段添加Cookie，服务器根据Cookie，从自身保存的记录中找出客户端上一次的状态信息。
+
