@@ -664,3 +664,44 @@ def is_action_allowed(user_id, action_key, capacity, leaking_rate):
 5) (integer) 2 # 多长时间后，漏斗完全空出来(left_quota==capacity，单位秒)
 ```
 
+## GeoHash
+
+在地图中，位置数据时通过经纬度来表示，如果要查找坐标(x,y)附近的人，则需要查找$(x\pm r,y\pm r)$范围内的数据，因此可以通过SQL指令`SELECT * from poitions where x0-r<x<x0+r and y0-r<y<y0+r`，但是这对服务器压力很大，在高并发场景下，数据库将成为瓶颈。
+
+另一种方案是采用距离位置排序算法GeoHash，GeoHash算法将二维的经纬度数据映射为一维的整数，二维上相邻的坐标在一维上也很接近。GeoHash将地球看做一个二维平面，如围棋棋盘，为每一个格子进行整数编码，越靠近的方格编码越接近，当获得编码后还能反推出对应的经纬度，因此方格越小，精度越高。
+
+Redis中编码为52位整数值，其内部结构为zset，将编码值作为`score`，通过`score`排序即可获得附近的其他元素。其支持的命令有：
+
+- 添加：`geoadd key 经度 纬度 地点名`，如`geoadd company 116.48105 39.996794 juejin `
+- 计算距离：`geodist key 地点 地点 单位`，如`geodist company juejin ireader km `，支持的距离单位有`m(米)`、`km(千米)`、`ml(英里)`、`ft(尺)`。
+- 获取经纬度：`geopos key 地点`，如`geopos company juejin`。
+- 获取元素的经纬度编码：`geohash key 地点`，返回值是base32编码，可以通过`http://geohash.org /编码`查看定位是否正确。
+- 根据地点查询附近地点：`georadiusbymember key 地点 距离 单位 [可选项] count 数量 排序方式`，如`georadiusbymember company ireader 20 km count 3 asc `，获得ireader附近20公里内正序排序后的前3个地点。其支持的显示可选项有：
+  - `withcoord`：现在坐标。
+  - `withdist`：显示距离。
+  - `withhash`：显示编码值。
+- 根据坐标查询附近地点：`georadius key 经度 纬度 距离 单位 [可选项] count 数量 排序方式`。
+
+集群环境下单个key的数据量不易超过1M(迁移时很麻烦)，因此Geo最好使用单独Redis实例部署，不要使用集群环境，如果数据量过大，可以通过拆分数据降低单个zset集合的大小，如按省、市、区划分。
+
+```python
+import redis
+
+client = redis.StrictRedis(host='127.0.0.1', port='6379')
+client.geoadd('company', 16.48105, 39.996794, 'juejin')
+client.geoadd('company', 16.514203, 39.905409, 'ireader')
+client.geoadd('company', 16.489033, 40.007669, 'meituan')
+client.geoadd('company', 16.562108, 39.787602, 'jd')
+client.geoadd('company', 16.334255, 40.027400, 'xiaomi')
+print(f"distance between juejin and ireader:",
+      f"{ client.geodist('company', 'juejin', 'ireader', 'km')} km")
+
+print(f"the position of juejin:", client.geopos('company', 'juejin'))
+print(f"the geohash of juejin:", client.geohash('company', 'juejin'))
+print(f"the companies nearby juejin 20km:",
+      client.georadiusbymember('company', 'juejin', 20, 'km', count=3)
+      )
+client.delete('company')
+```
+
+## Scan
