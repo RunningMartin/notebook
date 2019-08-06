@@ -55,6 +55,48 @@ Redis是单线程的，因此如果同一时间有很多key过期，处理所有
 
 ### LRU算法
 
+```python
+from collections import OrderedDict
+
+class LRUDict(object):
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.container = OrderedDict()
+
+    def __setitem__(self, key, value):
+        old_value = self.container.get(key, None)
+        if old_value is not None:
+            self.container.pop(key)
+        elif len(self.container) >= self.capacity:
+            self.container.popitem(last=True)
+        self.container[key] = value
+
+    def __getitem__(self, key):
+        value = self.container.get(key, None)
+        if value is not None:
+            self.container.move_to_end(key, last=False)
+        return value
+
+    def __str__(self):
+        elements = [element[1] for element in self.container.items()]
+        return ''.join(elements)
+
+def test_lru():
+    d = LRUDict(10)
+    for e in 'abcdefghij':
+        d[e] = e
+    assert str(d) == 'abcdefghij'
+
+    _ = d['d']
+    assert str(d) == 'dabcefghij'
+
+    d['k'] = 'k'
+    assert str(d) == 'dabcefghik'
+
+if __name__ == '__main__':
+    test_lru()
+```
+
 ### 近似LRU算法
 
 Redis中采用的是近似LRU算法，避免了消耗大量的额外内存。近视LRU算法会采用随机采样法来淘汰元素，Redis为每个key添加一个额外24bit的字段，用于记录最后一次被访问的时间戳。当Redis执行写操作时，如果内存使用超过`maxmemory`，执行LRU淘汰算法，随机取出5个key(`maxmemory-samples`设置)，淘汰最旧的key，直到内存使用低于`maxmemory`。Redis中添加了淘汰池(淘汰池的大小为maxmemory，每次淘汰循环，将随机选出的key加入淘汰池，然后淘汰最旧的key)，提升近似LRU算法的效果。
