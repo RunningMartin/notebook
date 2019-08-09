@@ -103,4 +103,31 @@ Redis中采用的是近似LRU算法，避免了消耗大量的额外内存。近
 
 ## 懒惰删除
 
+懒惰删除用于删除大对象，对于大对象执行删除操作会导致单线程卡顿，因此Redis引入了`unlink`指令，该指令将删除操作进行懒处理，主线程交出该Key，将该key包装为一个任务，塞入异步任务队列(线程安全)中，由后台异步线程处理。
+
+`flushdb`和`flushall`指令用于清空数据库，但是该操作非常缓慢，Redis添加了`async`参数用于后台清理：`flushall async`。
+
+Redis还将AOF日志同步操作也变为了一个异步线程，但该线程是一个独立线程，拥有一个专属任务队列，只存放AOF Sync任务。
+
+其他异步删除点：
+
+- `slave-lazy-flush`：从库接受rdb文件后的flush操作。
+- `lazyfree-lazy-eviction` ：内存达到`maxmemory`时进行淘汰
+- `lazyfree-lazy-expire`：key 过期删除
+-  `lazyfree-lazy-server-del rename` 指令删除 destKey 
+
 ## Redis安全保护
+
+安全保护用于避免数据泄露和丢失，避免主机权限被窃取，避免人为误操作
+
+- 指令安全：可在配置文件中通过`rename-command`将指令重命名，避免人为误操作，`rename-command flushall ""`，将无法执行。
+- 端口安全：Redis默认监听`*:6379`，因此会直接暴露在公网，因此可以通过`bind IP`绑定IP与端口。
+- 设置密码：`requirepass 密码`，设置后，从库的`masterauth`也必须配置相应的密码才能进行复制操作。
+- Lua脚本安全：防止黑客通过Lua脚本获得主机权限，因此要禁止Lua脚本由用户输入生成和Redis最好用普通用户启动。
+- SSL代理：spiped代理软件，避免客户端与服务器交互的数据被窃听。
+
+### spiped
+
+- 原理：spiped将在客户端和服务器端开启两个spiped进程，由spiped进程负责与Redis的客户端、服务器交互。
+
+！[spiped原理]()
