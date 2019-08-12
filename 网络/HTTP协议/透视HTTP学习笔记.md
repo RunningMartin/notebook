@@ -136,3 +136,32 @@ URI下有两个分支：URN和URL，HTTP的世界中采用是URL(Uniform Resourc
 查询参数中`?`代表开始，采用kv结构，如果有多个查询参数用&并列。
 
 URI的编码，避免在参数中出现`?&@`符号，会想ASCII码转移为16进制，然后添加`%`。
+
+## 状态码
+
+状态行由三部分组成：`HTTP版本`、`状态码`、`状态码描述`。
+
+![状态行]()
+
+HTTP协议中的状态码用于表达HTTP数据处理状态。状态码被分为5类：
+
+- `1xx`：提示信息，用于协议处理的中间状态。
+  - `101 Switching Protocols`：同意更换传输协议，通常客户端使用`Upgrade`字段告知新的传输协议。
+- `2xx`：成功，报文已收到并被正确处理。
+  - `200 OK`：正常处理请求。
+  - `204 No Content`：正常处理请求，但是只有响应头。
+  - `206 Partial Content`：响应了范围请求，通常会在`Content-Range:bytes 0-99/2000`中标识响应的数据范围。
+- `3xx`：重定向，资源位置发生变动。
+  - `301 Moved Permanently`：永久重定向。
+  - `302 Moved Temporarily`：临时重定向，用于临时维护。
+  - `304 Not Modified`：资源未修改，用于响应缓存控制。
+- `4xx`：客户端错误，请求报文有错误。
+  - `400 Bad Request`：通用错误码，用于表示请求报文有问题，比较笼统，不建议使用。
+  - `403 Forbiddeb`：禁止访问该资源。
+  - `404 Not Found`：资源不存在。
+  - `405 Method Not Allowed`：方法不被允许
+- `5xx`：服务端错误，处理请求时发生错误。
+  - `500 Internal Server Error`：通用错误码。
+  - `501 Not Implemented`：功能未实现。
+  - `502 Bad Gateway`：服务器作为网关或代理时，访问后端服务器失败。
+  - `503 Service Unavailable`：当前服务忙，搭配`Retry-After`字段指示客户端多久后重试。
