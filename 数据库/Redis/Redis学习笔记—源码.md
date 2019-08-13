@@ -111,3 +111,179 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
 }
 ```
 
+## 字典
+
+字典是Redis中出现最频繁的复合型数据结构，整个Redis的所有Key和Value组成了一个全局字典。
+
+### 内部结构
+
+字典是有哈希表组成的。哈希表是一个二维结构：第一维是数组；第二维是链表，存放冲突的元素。
+
+![](Raw/源码/哈希表.png)
+
+字典中元素的源码：
+
+```c#
+/*src/dict.h*/
+typedef struct dictEntry {
+    void *key;
+    union {
+        void *val;
+        uint64_t u64;
+        int64_t s64;
+        double d;
+    } v;
+    // 指向下一个元素
+    struct dictEntry *next;
+} dictEntry;
+```
+
+哈希表的源码：
+
+```c
+/*src/dict.h*/
+typedef struct dictht {
+    // 二维结构
+    dictEntry **table;
+    // 第一维的长度
+    unsigned long size;
+    unsigned long sizemask;
+    // 哈希表的元素个数
+    unsigned long used;
+} dictht;
+```
+
+### rehash
+
+当字典中元素有很多时，则需要对字典进行扩容。扩容流程分为两步：
+
+- 申请新的一维数组。
+- 将旧字典中的元素重新挂载到新的数组上。
+
+这个操作的时间复杂度为$O(n)$，Redis只有一个线程，这样的操作难以承受，因此Redis采用渐进式rehash。Redis的字典中有两个哈希表，旧的哈希表在完成rehash操作后，将变为空。
+
+![](Raw/源码/字典结构.png)
+
+字典的源码：
+
+```c
+/*src/dict.h*/
+typedef struct dict {
+    dictType *type;
+    void *privdata;
+    // 哈希表
+    dictht ht[2];
+    // rehash状态
+    long rehashidx; /* rehashing not in progress if rehashidx == -1 */
+    unsigned long iterators; /* number of iterators currently running */
+} dict;
+```
+
+Redis将rehash操作拆分两部分：
+
+- 字典添加新元素时，执行部分rehash操作。
+- 定时进行rehash操作。
+
+字典添加新元素源码：
+
+```c
+dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing)
+{
+    long index;
+    dictEntry *entry;
+    dictht *ht;
+	//进行小步rehash操作
+    if (dictIsRehashing(d)) _dictRehashStep(d);
+
+    if ((index = _dictKeyIndex(d, key, dictHashKey(d,key), existing)) == -1)
+        return NULL;
+	//如果处于rehash操作中，则将元素放入新哈希表中
+    ht = dictIsRehashing(d) ? &d->ht[1] : &d->ht[0];
+    entry = zmalloc(sizeof(*entry));
+    entry->next = ht->table[index];
+    ht->table[index] = entry;
+    ht->used++;
+
+    dictSetKey(d, entry, key);
+    return entry;
+}
+```
+
+定时任务源码：
+
+```c
+/*src/server.c*/
+void databasesCron(void) {
+    ......
+	//rehash
+    if (server.activerehashing) {
+        for (j = 0; j < dbs_per_call; j++) {
+            int work_done = incrementallyRehash(rehash_db);
+            if (work_done) {
+                // 如果执行了rehash操作
+                // 将在下一个循环中继续执行
+                break;
+            } else {
+                // 当前db不需要rehash操作，
+                // 切换到下一个db
+                rehash_db++;
+                rehash_db %= server.dbnum;
+            }
+        }
+    }
+    .....
+}
+```
+
+### hash函数
+
+哈希表的性能的取决于hash函数的质量。如果hash函数能将key分散的比较均匀，让二维链表的长度比较均匀时，则查找时的性能比较稳定。如果hash函数有偏向性，黑客可以通过存入有偏向性的数据，导致大量数据元素集中在个别链表中，导致性能下降，甚至还可能退化为单链表。Redis中默认采用`siphash`算法。
+
+### 扩缩容
+
+Redis会在字典的元素过多或过少时进行相应的容量调整。
+
+- 扩容
+
+  - 元素个数等于一维数组长度时，若没有做`bgsave`，则进行扩容(减少内存页过分分离)，新数组是原数组大小的2倍。
+  - 元素个数达到一维数组长度的5倍，则强制扩容。
+
+  ```c
+  static int _dictExpandIfNeeded(dict *d)
+  {
+      //rehash状态，则代表上次扩容未完成
+      if (dictIsRehashing(d)) return DICT_OK;
+  
+      // 字典为空时，扩容到初始化状态
+      if (d->ht[0].size == 0) return dictExpand(d, DICT_HT_INITIAL_SIZE);
+  	// 判断是否强制扩容
+      if (d->ht[0].used >= d->ht[0].size &&
+          (dict_can_resize ||
+           d->ht[0].used/d->ht[0].size > dict_force_resize_ratio))
+      {
+          return dictExpand(d, d->ht[0].used*2);
+      }
+      return DICT_OK;
+  }
+  ```
+
+- 缩容：当元素的个数小于数组长度的`10%`时，将执行缩容，减少空间占用。
+
+  ```c
+  static int _dictExpandIfNeeded(dict *d)
+  {
+      if (dictIsRehashing(d)) return DICT_OK;
+  
+      if (d->ht[0].size == 0) return dictExpand(d, DICT_HT_INITIAL_SIZE);
+  
+      if (d->ht[0].used >= d->ht[0].size &&
+          (dict_can_resize ||
+           d->ht[0].used/d->ht[0].size > dict_force_resize_ratio))
+      {
+          return dictExpand(d, d->ht[0].used*2);
+      }
+      return DICT_OK;
+  }
+  ```
+
+  
