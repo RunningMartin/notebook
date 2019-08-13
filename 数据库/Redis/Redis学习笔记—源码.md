@@ -111,6 +111,7 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
 }
 ```
 
+<<<<<<< HEAD
 ## 字典
 
 字典是Redis中出现最频繁的复合型数据结构，整个Redis的所有Key和Value组成了一个全局字典。
@@ -287,3 +288,62 @@ Redis会在字典的元素过多或过少时进行相应的容量调整。
   ```
 
   
+=======
+### 存储策略
+
+Redis的字符串有两种存储方式：
+
+- 当字符串长度小于等于`44`字节时，采用`embed`形式存储。
+- 当字符串长度大于`44`字节时，采用`raw`形式存储。
+
+```bash
+127.0.0.1:6379> set emb  abcdefghijklmnopqrstuvwxyz012345678912345678
+OK
+127.0.0.1:6379> debug object emb
+Value at:000007EA82412F40 refcount:1 encoding:embstr serializedlength:45 lru:529
+7573 lru_seconds_idle:13
+127.0.0.1:6379> set raw abcdefghijklmnopqrstuvwxyz0123456789123456789
+OK
+127.0.0.1:6379> debug object raw
+Value at:000007EA8246AEC0 refcount:1 encoding:raw serializedlength:46 lru:529770
+2 lru_seconds_idle:22
+```
+
+通过上面的实验可以看到两个字符串的`encoding`字段不同，这里有一个疑问：`emb`实际存储了`44`字节的数据，为什么`serializedlength`的值却是`45`？这个问题的答案是字符串的结尾会添加一个`\0`作为结束符。
+
+Redis所有的对象都会有一个对象头结构体：
+
+```c
+/*src/server.h*/
+typedef struct redisObject {
+    unsigned type:4;  //对象类型 4bits
+    unsigned encoding:4;//存储形式 4bits
+    unsigned lru:24; //LRU信息 24bits
+    int refcount;//引用计数 32bits
+    void *ptr;//ptr指向对象内容实际存储位置 8bytes
+} robj; //共计16字节
+```
+
+当字符串很小时，`SDS`的结构体为：
+
+```c
+/*src/sds.h*/
+struct __attribute__ ((__packed__)) sdshdr8 {
+    uint8_t len; // 实际使用的长度 8bits
+    uint8_t alloc; // 分配长度 8bits
+    unsigned char flags; // 标志位 8bits
+    char buf[];
+};
+```
+
+因此分配一个字符串最小长度为`19+1`字节(结束符`\0`占一个字节)。`jemalloc`分配内存大小依次为：`2、4、8、16、32、64`字节，如果超过总体`64`字节，Redis将使用`raw`来存储大字符串，因此`embed`和`raw`的分界线为`64-20=44`字节。
+
+在存储上，`embstr`采用RedisObject对象头和SDS对象连续存储，只需调用`malloc`一次来分配内存。
+
+![embstr形式]()
+
+而`raw`中，对象头和SDS对象分开存储，将调用两次`malloc`分配内存。
+
+![raw形式]()
+
+>>>>>>> d5de778a2f1dc340d2e9c6947025a584fe5cc740
