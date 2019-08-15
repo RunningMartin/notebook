@@ -174,3 +174,30 @@ HTTP协议中的状态码用于表达HTTP数据处理状态。状态码被分为
 - 应用层协议：因为其灵活可扩展，可以传输一切东西，满足各种需求。
 - 请求-应答模式：客户端主动请求，服务器端被动响应。
 - 无状态：每次请求是独立的。
+
+## HTTP实体
+
+### 实体类型
+
+HTTP协议采用MIME(Multipurpose Internet Mail Extensions)协议来表达实体的类型。实体的类型有`Content-Type`指定。
+
+- text：文本格式数据，常见`text/html`、`text/css`、`text/plain`等。
+- image：图像文件，常见`image/jpeg`、`image、gif`、`image/png`等。
+- `audio`：音频数据
+- `video`：视频数据
+- `application`：需要由上层应用解释的数据，如`application/pdf`。
+
+### 实体压缩
+
+HTTP为了节约带宽，可能会压缩数据，压缩格式由`Content-Encoding`指定：
+
+- `gzip`：采用`gzip`压缩。
+- `deflate`：采用`deflate`压缩。
+- `br`：采用`Brotli`算法压缩(为HTTP优化)。
+
+### 协商
+
+- 客户端通过`Accept`和`Accept-Encoding`传递自己能接受的实体类型和实体压缩方式。服务器端通过`Content-Type`和`Content-Encoding`传递协商结果。
+- 语言协商：`Accept-Language`，服务器是`Content-Language`
+- 字符集：`Accept-Charset`，响应没有`Content-Charset`
+- `Vary`：响应中存储内容协商时参考字段，如：`Vary:Accept-Encoding，User-Agent,Accept`，服务器依据Accept-Encoding，User-Agent,Accept来决定发回的响应报文。因此请求头的相应字段变化，Vary也会随响应报文变化。
