@@ -9,3 +9,4 @@ b&= d + e + f\tag{4}
 ```
 - 除法：`\dev`
 - 分数：`\frac{x}{y}`
+- 约等于：` \approx`
