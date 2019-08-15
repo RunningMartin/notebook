@@ -451,3 +451,50 @@ typedef struct intset {
 ### 参考
 
 - [redis源码分析之压缩链表ziplist](<https://www.jianshu.com/p/565795f43eed>)
+
+
+## 快速列表
+
+Redis早期的`list`采用`ziplist`(元素少时采用压缩列表)+`linkedlist`(元素多时采用普通的双向链表)。但`linkedlist`存在两个缺陷：
+
+- 附加空间相对较大：前驱`prev`和后继`next`需要占用`16`字节(64位操作系统)。
+- 每个节点的内存单独分配，加减内存的碎片化，影响内存管理效率。
+
+为了减轻这两个缺陷的影响，Redis采用`quicklist`来替换`ziplist`+`linkedlist`。`quicklist`是由多个`ziplist`组成的双链表。
+
+![快速列表结构]()
+
+`quicklist`源码为：
+
+```c
+/*src/quicklist.h*/
+typedef struct quicklistNode {
+    struct quicklistNode *prev;
+    struct quicklistNode *next;
+    unsigned char *zl;
+    unsigned int sz;             /* ziplist size in bytes */
+    unsigned int count : 16;     /* count of items in ziplist */
+    unsigned int encoding : 2;   /* RAW==1 or LZF==2 */
+    unsigned int container : 2;  /* NONE==1 or ZIPLIST==2 */
+    unsigned int recompress : 1; /* was this node previous compressed? */
+    unsigned int attempted_compress : 1; /* node can't compress; too small */
+    unsigned int extra : 10; /* more bits to steal for future usage */
+} quicklistNode;
+...
+typedef struct quicklist {
+    quicklistNode *head;
+    quicklistNode *tail;
+    unsigned long count;        /* total count of all entries in all ziplists */
+    unsigned long len;          /* number of quicklistNodes */
+    int fill : 16;              /* fill factor for individual nodes */
+    unsigned int compress : 16; /* depth of end nodes not to compress;0=off */
+} quicklist;
+```
+
+`quicklist`内单个`ziplist`的长度为`8k`字节，超过则新建一个`ziplist`，可以通过配置文件`redis.conf`的`list-max-ziplist-size`参数调整。
+
+Redis为了更节约空间，提供使用`LZF`对`ziplist`进行压缩。可以通过`listcompress-depth  `参数配置压缩深度。
+
+- `0`：不压缩。
+- `1`：首尾两个`ziplist`压缩。
+- `2`：首尾前两个`ziplist`压缩(共计4个)。
