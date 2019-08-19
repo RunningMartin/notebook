@@ -498,3 +498,34 @@ Redis为了更节约空间，提供使用`LZF`对`ziplist`进行压缩。可以�
 - `0`：不压缩。
 - `1`：首尾两个`ziplist`压缩。
 - `2`：首尾前两个`ziplist`压缩(共计4个)。
+
+## 跳表
+Redis中的`zset`是一个符合结构，一方面需要一个hash结构来存储`value`和`score`的对应关系；另一方面需要跳表来提供按`score`排序和指定`score`的范围来获取`value`列表的功能。`zset`的基础结构为：
+
+![zset基础结构]()
+
+每一个kv块对应的结构为：
+
+```c
+typedef struct zskiplistNode {
+    sds ele;// value
+    double score;//score
+    struct zskiplistNode *backward;//回溯指针
+    struct zskiplistLevel {
+        struct zskiplistNode *forward;
+        unsigned long span;
+    } level[];//多层连接
+} zskiplistNode;
+```
+
+跳表的源码为：
+
+```c
+typedef struct zskiplist {
+    struct zskiplistNode *header, *tail;
+    unsigned long length;
+    int level;
+} zskiplist;
+```
+
+## 紧凑列表
