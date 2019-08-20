@@ -500,32 +500,79 @@ Redis为了更节约空间，提供使用`LZF`对`ziplist`进行压缩。可以�
 - `2`：首尾前两个`ziplist`压缩(共计4个)。
 
 ## 跳表
+
 Redis中的`zset`是一个符合结构，一方面需要一个hash结构来存储`value`和`score`的对应关系；另一方面需要跳表来提供按`score`排序和指定`score`的范围来获取`value`列表的功能。`zset`的基础结构为：
 
 ![zset基础结构]()
 
-每一个kv块对应的结构为：
+跳表中节点的结构为：
 
 ```c
 typedef struct zskiplistNode {
     sds ele;// value
     double score;//score
-    struct zskiplistNode *backward;//回溯指针
+    struct zskiplistNode *backward;//上一个节点
     struct zskiplistLevel {
-        struct zskiplistNode *forward;
-        unsigned long span;
-    } level[];//多层连接
+        struct zskiplistNode *forward;//下一个节点
+        unsigned long span;// 跨度
+    } level[];// 层次信息
 } zskiplistNode;
+// 节点的backward指针和第一个forward指针用于创建最下层的双链表
+// 创建跳表中的节点
+zskiplistNode *zslCreateNode(int level, double score, sds ele) {
+	// 节点包含节点信息和level个层次信息
+    zskiplistNode *zn =
+        zmalloc(sizeof(*zn)+level*sizeof(struct zskiplistLevel));
+    zn->score = score;
+    zn->ele = ele;
+    return zn;
+}
 ```
 
 跳表的源码为：
 
 ```c
 typedef struct zskiplist {
+    // 跳表的头尾指针
     struct zskiplistNode *header, *tail;
+    // 元素个数
     unsigned long length;
-    int level;
+    // 最高层
+    int level;					
 } zskiplist;
 ```
 
+`zset`的结构为：
+
+```c
+typedef struct zset {
+    dict *dict;
+    zskiplist *zsl;
+} zset;
+```
+
+### 查找过程
+
+跳表查找元素是先从最高层开始遍历找到第一个节点(最后一个比我小的元素)，然后从该节点下降一层，再往后遍历寻找下一个节点直到找到期望的节点。其查找过程的时间复杂度会降到$O(logN)$。
+
+![搜索路径]()
+
+### 随机层数
+
+Redis中每个节点晋升的概率为`25%`，因此每层遍历的个数$2^2+1=5$个，但整个聊表相对扁平，层次相对较低。因此遍历的时候从顶层开始往下遍历会非常浪费，跳跃列表会记录当前最高层次`maxLevel`，遍历时从`maxLevel`开始遍历。
+
+```c
+#define ZSKIPLIST_P 0.25 
+int zslRandomLevel(void) {
+    int level = 1;
+    while ((random()&0xFFFF) < (ZSKIPLIST_P * 0xFFFF))
+        level += 1;
+    return (level<ZSKIPLIST_MAXLEVEL) ? level : ZSKIPLIST_MAXLEVEL;
+}
+```
+
+### 插入过程
+
 ## 紧凑列表
+
+## 基数树
