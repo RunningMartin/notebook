@@ -503,7 +503,7 @@ Redis为了更节约空间，提供使用`LZF`对`ziplist`进行压缩。可以�
 
 Redis中的`zset`是一个符合结构，一方面需要一个hash结构来存储`value`和`score`的对应关系；另一方面需要跳表来提供按`score`排序和指定`score`的范围来获取`value`列表的功能。`zset`的基础结构为：
 
-![zset基础结构]()
+![zset基础结构](Raw/源码/zset结构.png)
 
 跳表中节点的结构为：
 
@@ -511,11 +511,11 @@ Redis中的`zset`是一个符合结构，一方面需要一个hash结构来存�
 typedef struct zskiplistNode {
     sds ele;// value
     double score;//score
-    struct zskiplistNode *backward;//上一个节点
+    struct zskiplistNode *backward;//前一个节点
     struct zskiplistLevel {
         struct zskiplistNode *forward;//下一个节点
-        unsigned long span;// 跨度
-    } level[];// 层次信息
+        unsigned long span;//跨度
+    } level[];//层次信息
 } zskiplistNode;
 // 节点的backward指针和第一个forward指针用于创建最下层的双链表
 // 创建跳表中的节点
@@ -542,15 +542,6 @@ typedef struct zskiplist {
 } zskiplist;
 ```
 
-`zset`的结构为：
-
-```c
-typedef struct zset {
-    dict *dict;
-    zskiplist *zsl;
-} zset;
-```
-
 ### 查找过程
 
 跳表查找元素是先从最高层开始遍历找到第一个节点(最后一个比我小的元素)，然后从该节点下降一层，再往后遍历寻找下一个节点直到找到期望的节点。其查找过程的时间复杂度会降到$O(logN)$。
@@ -572,6 +563,72 @@ int zslRandomLevel(void) {
 ```
 
 ### 插入过程
+
+```c
+zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
+    // update 存储搜索路径
+    zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
+    // 存储经过的节点跨度
+    unsigned int rank[ZSKIPLIST_MAXLEVEL];
+    int i, level;
+
+    serverAssert(!isnan(score));
+    x = zsl->header;
+    // 逐步降级寻找目标节点，得到搜索路径
+    for (i = zsl->level-1; i >= 0; i--) {
+		// 存储到目标位置的跨度
+        rank[i] = i == (zsl->level-1) ? 0 : rank[i+1];
+        // 如果score相等，需要比较value值
+        while (x->level[i].forward &&
+                (x->level[i].forward->score < score ||
+                    (x->level[i].forward->score == score &&
+                    sdscmp(x->level[i].forward->ele,ele) < 0)))
+        {
+            rank[i] += x->level[i].span;
+            x = x->level[i].forward;
+        }
+        update[i] = x;
+    }
+	// 获得节点的层次信息
+    level = zslRandomLevel();
+    // 填充跨度
+    if (level > zsl->level) {
+        for (i = zsl->level; i < level; i++) {
+            rank[i] = 0;
+            update[i] = zsl->header;
+            update[i]->level[i].span = zsl->length;
+        }
+        // 更新跳跃列表的层高
+        zsl->level = level;
+    }
+    // 创建新节点
+    x = zslCreateNode(level,score,ele);
+    // 重排前向指针
+    for (i = 0; i < level; i++) {
+        x->level[i].forward = update[i]->level[i].forward;
+        update[i]->level[i].forward = x;
+
+        /* update span covered by update[i] as x is inserted here */
+        x->level[i].span = update[i]->level[i].span - (rank[0] - rank[i]);
+        update[i]->level[i].span = (rank[0] - rank[i]) + 1;
+    }
+
+    // 重排后续指针
+    for (i = level; i < zsl->level; i++) {
+        update[i]->level[i].span++;
+    }
+
+    x->backward = (update[0] == zsl->header) ? NULL : update[0];
+    if (x->level[0].forward)
+        x->level[0].forward->backward = x;
+    else
+        zsl->tail = x;
+    zsl->length++;
+    return x;
+}
+```
+
+
 
 ## 紧凑列表
 
