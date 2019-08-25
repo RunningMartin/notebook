@@ -22,7 +22,7 @@ HTTP协议通常跑在TCP/IP协议栈上，依靠IP协议实现寻址和路由�
 - **Web Service**：网络服务，是一个基于Web的服务架构技术。
 - **Web Server**：网络服务器，网络服务的载体。
 - **IP协议**：IP协议用于解决定位和路由问题。
-- **TCP协议**：基于IP协议，提供可靠的、字节流形式(两端可以向操控文件一样访问传输的数据)的通信。
+- **TCP协议**：基于IP协议，提供可靠的、字节流形式(两端可以像操控文件一样访问传输的数据)的通信。
 - **DNS**：提供域名与IP的转换服务，分根DNS、顶级DNS、权威DNS和本地DNS，逐层递归实现域名查询。
 - **URI|URL**：URI(Uniform Resource Identifier)统一资源标识符，通过它可以唯一标记互联网上的资源，其核心是标识资源；URL(Uniform Resource Locator)统一资源定位符，通过它能知道去哪里获取该资源，URL是URI的一个子集。
 - **HTTPS**：采用SSL/TLS加密HTTP的通信。

@@ -13,7 +13,7 @@
 - 生成配置文件：`cd openresty-1.15.8.1;./configure --prefix=/usr/local/apps`
 - 安装：`make && sudo make install`
 - 设置软连接：`sudo ln -sf /usr/local/apps/bin/openresty /usr/bin/openresty`
-- 启动：`sudo openresty  -c 配置文件`
+- 启动：`sudo openresty -p www -c conf/nginx.conf`
 - 测试：访问`http://localhost/`
 
 ![](raws/openresty初始界面.png)
