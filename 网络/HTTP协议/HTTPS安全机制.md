@@ -111,4 +111,18 @@ RSA握手流程
 双向验证
 
 ## TLS1.3
-
+- TLS1.2中的RSA算法不具备前向安全，因为私钥是固定的，一旦私钥泄露，之前的包都会被破解，ECDHE采用临时公钥，保证安全性
+- 兼容：TS1.3为了更好的兼容，通过扩展协议完成向后兼容，hello会使用support_versions扩展，标记支持的supported_version。
+- 强化安全：只有五种套件
+  - 伪随机数从PRF升级为HKDF
+  - 禁止在记录协议中压缩
+  - 对称加密只保留：AES、ChaCha20
+  - 分组只能用：GCM、CCM、Poly1305
+  - 摘要算法只有：SHA256、SHA384
+  - 密钥交换算法只有ECDHE和DHE
+  - 椭圆曲线只有P-256等五种
+- 提升性能：TLS1.2握手需要两个消息往返，而TLS由于密码套件简化，删除了key exchange，能在1个消息往返内完成握手。其利用扩展字段实现
+  - supported_groups:支持的曲线
+  - key_share:曲线对应的公钥
+  - signature_algorithms:签名算法
+  - 还能通过前提条件完成0 rtt握手。
