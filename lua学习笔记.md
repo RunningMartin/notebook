@@ -401,7 +401,6 @@ and、or、not(非)
 ### 其他
 
 - `..`：连接两个字符串
-
 - `#`：返回字符串或表长度
 
 ```lua
@@ -780,18 +779,473 @@ end
 
 ## 模块
 
+模块类似一个封装好的库，通过将公共代码放在文件中，以API的形式展现出来，有利于代码的重用和降低代码耦合度与复杂度。
+
+```lua
+-- 模块是以表的形式展现出来的，因此只需创建一个表，最后返回这个表就行。
+module = {}
+
+-- 模块内部使用的函数
+local function contains(tab,value)
+	for k,v in pairs(tab)
+	do
+		if v==value
+		then
+			return true
+		end
+	end
+	return false
+end
+
+-- 对外提供的api
+function module.removeRepeated(tab)
+	local new_table={}
+	len=0
+	for k,v in pairs(tab)
+	do
+
+		if not contains(new_table,v)
+		then
+			len=len+1
+			new_table[len]=v
+		end
+	end
+	return new_table
+end
+
+return module
+```
+
+模块的加载可以通过`require`来实现。
+
+```lua
+-- 加载模块
+local sort_module=require('模块名')
+my_table={3,1,2,5,8,6,5,7,8,9}
+removed=sort_module.removeRepeated(my_table)
+
+table.sort(removed)
+print("去重后")
+for k,v in pairs(removed) do
+	print(v)
+end
+```
+
+lua的加载机制由自己的文件路径加载策略，会尝试从Lua文件或C程序库中加载模块。`require('package_name')`，将从Lua文件或C程序库的位置加载模块。Lua文件的位置由全局变量`package.path`决定，Lua启动时，根据环境变量`LUA_PATH`初始化该变量。从路径中找到文件后，使用`package.loadfile`加载模块。
+C程序库的位置由全局变量`package.cpath`决定，该变量使用`LUA_CPATH`进行初始化。在路径中找到文件后，使用`package.loadlib`加载。
+
+Lua中使用C包前必须加载并连接，通过`loadlib(path,'package_name')`能实现动态连接。
+
+```lua
+local path = "/usr/local/lua/lib/libluasocket.so"
+-- path 绝对路径 初始化函数，loadlib将返回初始化函数，不会打开库，因此加载失败或寻找失败时，loadlib将返回nil和错误信息
+local f = loadlib(path, "luaopen_socket")
+-- 检查是否存在错误
+assser(f)
+-- 打开库
+f()
+```
+
 ## 元表
+
+Metatable允许我们修改table的行为，每个行为都关联了对应的元方法。比如两个table执行加法操作时，Lua会尝试对两个表进行相加，先检查表中是否有Metatable，然后检查是否有`__add`的字段，如果有，则调用。`__add`对应相应的元方法。
+
+- **setmetatable(table,metatable)：**设置metatable，如果metatable已经存在`__metatable`键值，将失败
+- **getmetatable(table):** 返回对象的元表(metatable)。
+
+```lua
+mytable = {}                          -- 普通表
+mymetatable = {}                      -- 元表
+setmetatable(mytable,mymetatable)     -- 把 mymetatable 设为 mytable 的元表
+-- 等价于
+mytable = setmetatable({},{})
+```
+
+### 常见的元方法
+
+- `__index`。访问表中不存在的键，会使用`__index`来处理。如果`__index`包含一个表格，Lua在表格中查找相应的键。如果`__index`是一个函数，Lua会调用该函数，并传递table和键，如果键不存在，则返回nil。
+
+  ```lua
+  -- 表
+  other={foo=3}
+  table=setmetatable({},{__index=other})
+  print(table.foo)
+  print(table.bar)
+  -- 函数
+  print(table.foo)
+  print(table.bar)
+  ```
+
+- `__newindex`。对表进行更新，如果给一个不存在的索引赋值，会使用`__newindex`来处理。如果存在，则调用该函数，而不进行赋值。如果`__newindex`是函数，将传递table、键、值
+
+  ```lua
+  -- 表
+  metatable={}
+  table=setmetatable({key1='key1'},{__newindex=metatable})
+  print(table.key1)
+  -- key1
+  table.key2='key2'
+  print(table.key2,metatable.key2)
+  -- nil	key2
+  table.key1='new key1'
+  print(table.key1,metatable.key1)
+  -- new key1	nil
+  -- 函数
+  table=setmetatable({key1='key1'},{__newindex=
+  function(table,key,value)
+  	rawset(table,key,value)
+  end
+  })
+  print(table.key1,table.key2)
+  -- key1	nil
+  table.key1 = "new value"
+  table.key2 = 4
+  print(table.key1,table.key2)
+  -- new value	4
+  ```
+
+- 常见操作符
+
+  | 模式     | 描述               |
+  | -------- | ------------------ |
+  | __add    | 对应的运算符 '+'.  |
+  | __sub    | 对应的运算符 '-'.  |
+  | __mul    | 对应的运算符 '*'.  |
+  | __div    | 对应的运算符 '/'.  |
+  | __mod    | 对应的运算符 '%'.  |
+  | __unm    | 对应的运算符 '-'.  |
+  | __concat | 对应的运算符 '...' |
+  | __eq     | 对应的运算符 '=='. |
+  | __lt     | 对应的运算符 '<'.  |
+  | __le     | 对应的运算符 '<='. |
+
+- `__call`。定义作为函数时的动作。
+
+  ```lua
+  function table_maxn(t)
+      local mn = 0
+      for k, v in pairs(t) do
+          if mn < k then
+              mn = k
+          end
+      end
+      return mn
+  end
+  
+  -- 定义元方法__call
+  mytable = setmetatable({10}, {
+    __call = function(mytable, newtable)
+          sum = 0
+          for i = 1, table_maxn(mytable) do
+                  sum = sum + mytable[i]
+          end
+      for i = 1, table_maxn(newtable) do
+                  sum = sum + newtable[i]
+          end
+          return sum
+    end
+  })
+  newtable = {10,20,30}
+  print(mytable(newtable))
+  ```
+
+- `__tostring`。修改表的输出行为。
+
+  ```lua
+  mytable = setmetatable({ 10, 20, 30 }, {
+    __tostring = function(mytable)
+      sum = 0
+      for k, v in pairs(mytable) do
+                  sum = sum + v
+          end
+      return "表所有元素的和为 " .. sum
+    end
+  })
+  print(mytable)
+  ```
 
 ## 协程
 
+协程和协程的区别是，多线程程序中，切成的切换由操作系统决定，而协程是基于单线程的，有用户决定切换。
+
+| 方法                        | 描述                                         |
+| --------------------------- | -------------------------------------------- |
+| coroutine.create(function)  | 创建协程                                     |
+| coroutine.resume(协程,参数) | 重启协程                                     |
+| coroutine.yield()           | 将协程设置为挂起状态resume                   |
+| coroutine.status()          | 查看协程的状态(dead，suspended，running)     |
+| coroutine.wrap()            | 创建协程，返回一个函数，调用函数时，协程启动 |
+| coroutine.running()         | 返回正在运行协程的线程号                     |
+
+```lua
+function foo (a)
+    print("foo 函数输出", a)
+	print('status',coroutine.status(co))
+    return coroutine.yield(2 * a) -- 返回  2*a 的值 暂停，返回值为2*a
+end
+
+co = coroutine.create(function (a , b)
+    print("第一次协同程序执行输出", a, b) -- co-body 1 10
+    local r = foo(a + 1)
+
+    print("第二次协同程序执行输出", r)
+    local r, s = coroutine.yield(a + b, a - b)  -- a，b的值为第一次调用协同程序时传入
+
+    print("第三次协同程序执行输出", r, s)
+    return b, "结束协同程序"                   -- b的值为第二次调用协同程序时传入
+end)
+print('status',coroutine.status(co))
+print("main", coroutine.resume(co, 1, 10)) -- true, 4
+print('status',coroutine.status(co))
+print("--分割线----")
+print("main", coroutine.resume(co, "r")) -- true 11 -9
+print("---分割线---")
+print("main", coroutine.resume(co, "x", "y")) -- true 10 end
+print("---分割线---")
+print("main", coroutine.resume(co, "x", "y")) -- cannot resume dead coroutine
+print("---分割线---")
+```
+
 ## 文件
+
+Lua中处理文件分别有两种模式：
+
+- 简单模式：同C语言。
+- 完全模式：使用文件句柄实现。
+
+文件打开：`file=io.open(filename[,mode])`。mode有`r、w、a、+、b`。
+
+### 简单模式
+
+简单模式使用标准I/O或当前输入文件。
+
+```lua
+file=io.open('1.lua','r')
+-- 设置默认输入文件
+io.input(file)
+print(io.read())
+
+io.close()
+
+file=io.open('1.lua','a')
+-- 设置默认输入文件
+io.output(file)
+io.write('-- 1.lua 注释')
+
+io.close()
+```
+
+`io.read`的参数：
+
+| 模式         | 描述                                                         |
+| ------------ | ------------------------------------------------------------ |
+| "*n"         | 读取一个数字并返回它。例：file.read("*n")                    |
+| "*a"         | 从当前位置读取整个文件。例：file.read("*a")                  |
+| "*l"（默认） | 读取下一行，在文件尾 (EOF) 处返回 nil。例：file.read("*l")   |
+| number       | 返回一个指定字符个数的字符串，或在 EOF 时返回 nil。例：file.read(5) |
+
+其他io方法
+
+- `io.tmpfile()`：返回一个临时文件，该文件已更新模式打开，程序结束时自动删除。
+- `io.type(file)`：检查file是否是一个可用文件句柄。
+- `io.flush()`：将缓存中的信息写入文件。
+- `io.lines(filename)`：按行迭代文件，读完后，返回nil，但不关闭文件。
+
+### 完全模式
+
+完全模式不再采用`io.x`进行操作，而是`file:x`。
+
+```lua
+file = io.open("1.lua", "r")
+
+-- 输出文件第一行
+print(file:read())
+
+-- 关闭打开的文件
+file:close()
+
+-- 以附加的方式打开只写文件
+file = io.open("1.lua", "a")
+
+-- 在文件最后一行添加 Lua 注释
+file:write("--test")
+
+-- 关闭打开的文件
+file:close()
+```
+
+其他方法：
+
+- file:seek(起点，偏移量)：移动游标，并返回最终文件位置(字节)，失败返回nil，默认为文件开头
+  - "set": 从文件头开始
+  - "cur": 从当前位置开始[默认]
+  - "end": 从文件尾开始
+  - offset:默认为0
+- file:flush()：刷新缓存。
+- io.lines(文件名)，按行迭代文件，读完后，返回nil，但不关闭文件。默认input指定的文件。
 
 ## 错误处理
 
+Lua中有两种错误类型
+
+- 语法错误
+- 运行错误
+
+语法错误会导致程序无法运行。而运行错误只有在运行时才会出现。处理错误时有以下几种方法：
+
+```lua
+-- 检查参数
+local function add(a,b)
+   assert(type(a) == "number", "a 不是一个数字")
+   assert(type(b) == "number", "b 不是一个数字")
+   return a+b
+end
+add(10)
+-- 终止执行，返回错误信息
+error (message [, level])
+-- 默认值 level=1 ，错误位置为调用error的位置
+-- level=2， 错误位置为调用error函数的函数
+-- level=0，不添加错误位置信息
+```
+
+pcall、xpcall、debug
+
+- pcall(函数,参数)：将使用参数去执行函数，并返回true(成功)、false(失败)与errorinfo。pcall能捕获执行中的错误。
+- xpcall(函数，错误处理函数，参数)：如果出现错误，将调用错误处理函数，函数能通过`debug`获取错误的信息，常用的错误处理
+  - `debug.debug`：返回Lua提示信息
+  - `debug.traceback`：堆栈信息
+
+```lua
+xpcall(function(i) print(i) error('error..') end, function() print(debug.traceback()) end, 33)
+-- 返回lua提示信息
+xpcall(function(i) print(i) error('error..') end, function(error) print(error) end, 33)
+```
+
 ## 调试
+
+debug库
 
 ## 垃圾回收
 
+lua内部采用增量标记-扫描搜集器实现了自动内存管理。通过两个数字(百分比)来控制垃圾回收循环。
+
+- 垃圾收集器间歇率：开启新的一轮回收循环时需要等多久。当值小于100时，会立即开启新的循环。如果设置为200，则表示收集器会等到总内存使用量达到设置时的两倍才开始新的循环。
+- 垃圾收集器步进倍率：收集器运作速度相对于内存分配速度的倍率。默认为200，如果小于100，则会导致收集器工作很慢。
+
+Lua中可以使用collectgarbage(opt[,arg])来控制自动内存管理。
+
+- **collectgarbage("collect"):** 执行一次完整的垃圾收集循环。
+- **collectgarbage("count"):** 返回Lua使用的总内存数，单位为K。
+- **collectgarbage("restart"):** 重启垃圾收集器的自动运行。
+- **collectgarbage("setpause"):**设置垃圾收集器间歇率。 返回之前的间歇率。
+- **collectgarbage("setstepmul"):** 设置垃圾收集器步进倍率。 返回之前的步进倍率。
+- **collectgarbage("step"):** 单步运行垃圾收集器。 步长由arg控制。传入0，收集器步进（不可分割的）一步。传入非0值， 收集器收集相当于 Lua分配这些多K字节内存的工作。如果收集器结束一个循环将返回 true。
+- **collectgarbage("stop"):** 停止垃圾收集器的运行。 
+
 ## 面对对象
 
+面对对象有四大特征：
+
+- 封装：function实现。
+- 继承：metatable实现
+- 多态：
+- 抽象：table+function模拟。
+
+`:`调用时，将table作为self传入。
+
+```lua
+-- 定义类名和属性名称
+Rectangle = {area, length, breadth}
+
+-- 派生类的方法 new
+function Rectangle:new(length,breadth)
+  local o ={length = 0, breadth = 0,area = length*breadth}
+  setmetatable(o, self)
+  self.__index = self
+  return o
+end
+
+-- 派生类的方法 printArea
+function Rectangle:printArea ()
+  print("矩形面积为 ",self.area)
+end
+
+r = Rectangle:new(10,20)
+b = Rectangle:new(20,20)
+
+-- 访问属性
+print(r.length)
+-- 调用成员函数
+r:printArea()
+
+
+-- 访问属性
+print(b.length)
+-- 调用成员函数
+b:printArea()
+
+-- 访问属性
+print(r.length)
+-- 调用成员函数
+r:printArea()
+```
+
+继承
+
+```lua
+-- Meta class
+Shape = {aree}
+-- 基础类方法 new
+function Shape:new (side)
+  o = {area = 0,side=side,area = side*side}
+  setmetatable(o, self)
+  self.__index = self
+  return o
+end
+-- 基础类方法 printArea
+function Shape:printArea ()
+  print("面积为 ",self.area)
+end
+
+-- 继承父类
+Square = Shape:new()
+-- Derived class method new
+function Square:new (o,side)
+  o = o or Shape:new(o,side)
+  setmetatable(o, self)
+  self.__index = self
+  return o
+end
+```
+
 ## 数据库访问
+
+使用LuaSQL操作库，支持ODBC, ADO, Oracle, MySQL, SQLite 和 PostgreSQL。
+
+```lua
+luasql = require "luasql.mysql"
+
+--创建环境对象
+env = luasql.mysql()
+--连接数据库
+conn = env:connect("数据库名","用户名","密码","IP地址",端口)
+--设置数据库的编码格式
+conn:execute"SET NAMES UTF8"
+--执行数据库操作
+cur = conn:execute("select * from role")
+row = cur:fetch({},"a")
+--文件对象的创建
+file = io.open("role.txt","w+");
+
+while row do
+    var = string.format("%d %s\n", row.id, row.name)
+    print(var)
+    file:write(var)
+    row = cur:fetch(row,"a")
+end
+
+file:close()  --关闭文件对象
+conn:close()  --关闭数据库连接
+env:close()   --关闭数据库环境
+```
+
