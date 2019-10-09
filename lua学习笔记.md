@@ -989,6 +989,7 @@ co = coroutine.create(function (a , b)
     local r = foo(a + 1)
 
     print("第二次协同程序执行输出", r)
+    -- yield 将接受resume 传入的参数
     local r, s = coroutine.yield(a + b, a - b)  -- a，b的值为第一次调用协同程序时传入
 
     print("第三次协同程序执行输出", r, s)
