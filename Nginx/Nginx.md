@@ -266,7 +266,141 @@ nobody   15818 15815  0 22:03 ?        00:00:00 nginx: worker process
 
 #### 反向代理
 
+上游服务器要处理很多操作，因此效率上不高。可以通过反向代理服务由1台nginx服务器，将请求分发给多个上游服务器处理，实现水平扩展。
+
+- 上游服务器配置
+
+  ```
+  # 可以通过flask等框架启动监听ip:端口(这里的ip通常不对外提供访问)
+  ```
+
+- 反向代理(openresty)
+
+  ```nginx
+  worker_processes  1;
+  events {
+      worker_connections  1024;
+  }
+  
+  
+  http {
+      include       mime.types;
+      default_type  application/octet-stream;
+  
+      sendfile        on;
+      keepalive_timeout  65;
+  
+      upstream local{# local为一组服务器的名词
+          server 127.0.0.1:8080;# 设置上游服务器的ip与端口
+      }
+  
+      # 设置缓存信息
+      proxy_cache_path path  # 缓存文件的位置
+          # 缓存的层次结构，最多三级
+          [levels=levels] # 1:2 ，将大量文件放在一个目录会导致文件访问慢
+          [use_temp_path=on|off]# 
+          # 共享缓存空间，存储缓存键和元数据，可以在不检索磁盘的情况下判断是否命中
+          keys_zone=name:size  #name 缓存的名称，size为缓存区大小
+          [inactive=time] # 未访问情况下，内存中存活时间，默认10m
+          [max_size=size] # 缓存文件的上限，达到上限后，采用LRU清理
+          [manager_files=number] 
+          [manager_sleep=time] 
+          [manager_threshold=time] 
+          # 缓存内容加载到指定共享缓存区
+          [loader_files=number] # 执行间隔内，最多加载多少条缓存，默认100
+          [loader_sleep=time] # 每两次加载的间隔，单位毫秒，默认50
+          [loader_threshold=time] # 加载缓存最大执行时间 单位毫秒，默认200
+          [purger=on|off] 
+          [purger_files=number] 
+          [purger_sleep=time] 
+          [purger_threshold=time]; 
+      
+      server {
+          listen       80;        # 反向代理监听的端口
+          server_name  localhost; # 反向代理的域名
+          # 代理的具体信息可以在http_proxy_module中找到
+          # https://nginx.org/en/docs/http/ngx_http_proxy_module.html
+          location / {
+              # 设置代理的header信息
+              proxy_set_header Host $host;# 设置代理和上游服务的header信息
+              proxy_set_header X-Real-IP $remote_addr;# 设置为远端ip
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  
+              # 配置缓存，缓存命中后，将不会访问上游服务器
+              proxy_cache 缓存名词(proxy_cache_path中keys_zone的name);
+              
+              # 配置缓存的key
+              # 作为key的具体参数参考ngx_http_core_module文档
+              # https://nginx.org/en/docs/http/ngx_http_core_module.html
+              proxy_cache_key $host$uri$is_args$args;# 缓存中是kv结构，设置缓存的key
+              
+              # 设置响应的缓存时间
+              # 缓存200 304 302响应 1分钟
+              proxy_cache_valid 200 304 302 1m;
+              # 缓存404响应 10分钟
+              proxy_cache_valid 404      10m;
+  
+              # 配置代理
+              proxy_pass http://local # 代理到local这一组上游服务器中
+          }
+      }
+  }
+  ```
+
+缓存的数据被存储在文件中，在缓存中的文件名是`proxy_cache_key`的md5值，缓存的结构为kv结构。
+
+`proxy_cache_path`指令：
+
+- path：缓存文件的位置。
+- levels=levels：设置缓存文件的层级结构，最多三级，每级为1或2，表示文件名长度，层级之间用`:`隔开，如`1:2 `。大量文件放在一个目录会导致文件访问慢，建议采用多级结构。
+- use_temp_path=on|off： 设置缓存响应的临时文件位置，缓存的响应会先存到临时文件中，然后才会被重命名，放入缓存。如果为on(默认值)，则临时文件存放在`proxy_temp_path`指定的位置；为off，则临时文件和缓存放在同一目录。推荐值为off。
+
+- keys_zone=name:size：设置活跃缓存空间，活跃的键和数据的元信息将被存储在缓存空间中，name 缓存的名称，size为缓存区大小。1M大约能存8000个键。
+- inactive=time：未访问情况下，缓存的存活时间，默认10m。
+- 缓存清理
+- max_size=size：缓存文件的上限，达到上限后，采用LRU清理
+- manager_files=number：一个迭代删除的缓存个数，默认100。
+- manager_sleep=time：两个迭代之间的间隔时间，默认50毫秒。
+- manager_threshold=time：一个迭代持续时间，默认200毫秒。
+- 缓存加载器，Nginx启动后，将缓存内容加载到指定的共享内存区，分多次加载，避免影响性能。
+- loader_files=number：一个迭代，最多加载多少条缓存，默认100
+- loader_sleep=time：每两次迭代加载的间隔，单位毫秒，默认50
+- loader_threshold=time：一个迭代加载缓存最大执行时间 单位毫秒，默认200
+- 下面为商业版本：删除缓存的同时是否也删除磁盘上的信息。
+- purger=on|off
+- purger_files=number 
+- purger_sleep=time
+- purger_threshold=time
+
 #### GoAccess
 
+GoAccess可以用于实时分析`access.log`。
+
+- 安装：`https://goaccess.io/download`
+- 启动goaccess：`goaccess access.log -o report.html --log-format=COMBINED`指定html文件生成位置，日志文件的格式，默认为`COMBINED`，`--real-time-html`为实时更新。
+- nginx中添加location，指向该`report.html`。
+
+```nginx
+location /report.html{
+    alias report.html路径;
+}
+```
+
+report.html将实时从`websocket`中生成数据。
+
 #### SSL
+
+#### SSL/TLS通用模型
+
+![](raw/TLS模型.png)
+
+![](raw/TLS安全密码套件.png)
+
+#### 公信力
+
+![](raw/证书链.png)
+
+![TLS通信过程](raw/TLS通信过程.png)
+
+![PKI公钥](raw/PKI公钥.png)
 
