@@ -653,6 +653,8 @@ internal指令为内部。
 
 ## content阶段
 
+content阶段主要负责生成响应。
+
 ### static模块
 
 static模块是不能移除的，`alias`和`root`指令都是将url映射为文件路径，返回静态文件内容。
@@ -977,3 +979,155 @@ Context: http, server, location
   - min_users:在inactive内使用次数超过min_users，才不会关闭，默认为1。
   - valid：超过valid后，将对缓存的日志文件检查是否存在，默认60S
   - off：关闭。
+
+## 过滤模块
+
+过滤模块在content阶段之后，log阶段之前进行工作。
+
+![过滤模块的位置](raw/HTTP模块/过滤模块的位置.png)
+
+content阶段生成响应后，先对header进行过滤，然后再压缩发送HTTP头部，最后采用对body进行过滤，压缩发送。相关的模块顺序查看编译后的`ngx_modules.c`文件。主要有四个过滤模块：
+
+- `copy_filter`：复制包体内容
+- `postpone_filter`：处理子请求
+- `header_filter`：构造响应头部
+- `write_filter`：发送响应
+
+### sub模块
+
+`ngx_http_sub_module`模块可以用于将响应中指定的字符串替换为新的字符串，默认不便于入Nginx。
+
+- `sub_filter`：将string替换为replacement，替换时忽略大小写。
+
+```
+Syntax: sub_filter string replacement;
+Default: —
+Context: http, server, location
+```
+
+- `sub_filter_last_modified`：是否返回last_modified字段。
+
+```
+Syntax: sub_filter_last_modified on | off;
+Default: sub_filter_last_modified off; 
+Context: http, server, location
+```
+
+- `sub_filter_once`：是否只修改第一个匹配值。
+
+```
+Syntax: sub_filter_once on | off;
+Default: sub_filter_once on; 
+Context: http, server, location
+```
+
+- `sub_filter_types`：只针对那些类型的响应进行匹配。
+
+```
+Syntax: sub_filter_types mime-type ...;
+Default: sub_filter_types text/html; 
+Context: http, server, location
+```
+
+### addition模块
+
+`ngx_http_addition_module`模块在响应前后响应后增加内容，而增加内容的方式是通过新增子请求的响应完成，默认不编译。
+
+- `add_before_body`：添加在body之前，添加的内容为uri的响应。
+
+```nginx
+Syntax: add_before_body uri;
+Default: —
+Context: http, server, location
+```
+
+- `add_after_body`：添加在body之后。
+
+```nginx
+Syntax: add_after_body uri;
+Default: —
+Context: http, server, location
+```
+
+- `addition_types`：只对目标类型进行响应。
+
+```nginx
+Syntax: addition_types mime-type ...;
+Default: addition_types text/html; 
+Context: http, server, location
+```
+
+## 变量
+
+### 运行原理
+
+变量是一个很好的解耦工具，分为提供变量和使用变量的模块。Nginx启动时，提供变量的模块定义了一个kv结构，k为变量名，v为解析变量的方法(每个模块专注于自己提供)；在nginx.conf中使用变量的模块定义了变量的使用方式。当请求来后，通过定义好的方法解析请求。
+
+- 惰性求值：只有当要使用这个变量时，才会去求值。因此变量值是实时变化的，其值是使用那一刻的值。
+
+为了提高变量的存取性能，nginx提供了存放变量的哈希表。
+
+- `variables_hash_bucket_size size`：每个元素的bucket_size，默认64，在http模块中。
+
+- `variables_hash_max_size size`：默认1024，在http模块中。
+
+### HTTP框架提供的变量
+
+#### HTTP请求相关的变量
+
+- `arg_参数名`：URL中某个具体参数的值。
+- `query_string`：
+- `args `：url中全部参数，`a=1&b=22`。
+- `is_args`：判断是否有参数，有则为？，无则为空。
+- `content_length`：返回请求中头部字段`Content-Length`的值。
+- `content_type`：请求头部字段`Content-Type `。
+- `uri`：返回请求的URI，不包括?后的参数
+- `document_uri`：同uri。
+- `request_uri`：请求的URL，包括参数。
+- `scheme`：返回协议名。
+- `request_method`：返回请求方法。
+- `request_length`：请求内容的大小。
+- `remote_user`：返回HTTP Basic Authentic协议传入的用户名。
+- `request_body_file`：临时存放请求包体的文件(包体很小时不会存放入文件，使用client_body_in_file_only强制存入文件，可以删除)。
+- `request_body`：请求的包体，只有在使用反向代理，且设定用内存暂存包体时才有效。
+- `requst`：返回请求行，`GET /?a=1&b=22`
+- `host`
+  - 先从请求行中获取
+  - 从Host字段中区
+  - 前二者都不能取到，使用匹配上的server_name值。 
+- `http_头部名字`：返回请求中头部字段，以下为特殊，nginx会进行特殊处理：
+  - `http_host`
+  - `http_user_agent`
+  - `http_referer`
+  - `http_via`
+  - `http_x_forwarded_for`
+  - `http_cookie`
+
+#### TCP连接相关的变量
+
+- `binary_remote_addr`：tcp连接为一个四元组，客户端地址的整形格式，对于IPv4为4字节，IPv6为16字节。
+- `connection`：连接序号
+- `connection_requests`：当前连接上执行的请求数，通常用在keepalive
+- `remote_addr`：客户端IP
+- `remote_port`：客户端端口
+- `proxy_protocol_addr`：如果使用了`proxy_protocol`，则返回协议中的地址。
+- `proxy_protocol_port`：如果使用了`proxy_protocol`，则返回协议中的端口。
+- `server_addr`：服务器端地址
+- `server_port`：服务器端端口
+- `TCP_INFO`：tcp内核层参数，如`tcpinfo_rtt`、`tcpinfo_rttvar`、`tcpinfo_snd_cwnd`、`tcpinfo_rcv_space`。
+- `server_protocol`：服务器端协议。
+
+#### Nginx处理请求过程中产生的变量
+
+![Nginx处理过程中生成的变量1](raw/HTTP模块/Nginx处理过程中生成的变量1.png)
+
+![](raw/HTTP模块/Nginx处理过程中生成的变量2.png)
+
+#### HTTP响应时相关变量
+
+![](raw/HTTP模块/HTTP响应时相关的变量.png)
+
+#### Nginx系统变量
+
+![](raw/HTTP模块/Nginx系统变量.png)
+
