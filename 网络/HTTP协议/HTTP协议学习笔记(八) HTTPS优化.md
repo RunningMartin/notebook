@@ -86,6 +86,7 @@ ssl_ecdh_curve X25519:P-256;
     # 安装依赖
     ➜  nginx-1.16.1 sudo apt install libpcre3 libpcre3-dev
     ➜  nginx-1.16.1 sudo apt install zlib1g zlib1g-dev
+    ➜  nginx-1.16.1 sudo apt install openssl 
     # 生成配置文件
     ➜  nginx-1.16.1 ./configure --prefix=/usr/local/nginx  --with-http_ssl_module
     # 编译并安装
@@ -385,7 +386,80 @@ Status: active
   # 第二次访问时，Basic OCSP Response
   ```
 
-- 评分：可以通过https://www.ssllabs.com/来查看下自己的HTTPS站点的得分。
+- 使用`TLS 1.3`
+
+    ```bash
+    # 下载nginx源码
+    ➜  network_lib wget https://nginx.org/download/nginx-1.17.3.tar.gz
+    ➜  network_lib tar -zxvf nginx-1.17.3.tar.gz
+    # 下载openssl 1.1.1
+    ➜  network_lib wget -c  https://github.com/openssl/openssl/archive/OpenSSL_1_1_1.tar.gz
+    ➜  network_lib tar -zxvf OpenSSL_1_1_1.tar.gz
+    ➜  network_lib mv openssl-OpenSSL_1_1_1 openssl
+    # 目录结构
+    ➜  network_lib tree -L 1                       
+    .
+    ├── nginx-1.17.3
+    ├── nginx-1.17.3.tar.gz
+    ├── openssl
+    └── openssl-OpenSSL_1_1_1.tar.gz
+    # 编译
+    ➜  network_lib cd nginx-1.17.3
+    ➜  nginx-1.17.3 ./configure --with-openssl=../openssl --with-openssl-opt='enable-tls1_3 enable-weak-ssl-ciphers' --with-http_ssl_module
+    ➜  nginx-1.17.3 sudo make && sudo make install
+    ➜  nginx-1.17.3 cd /usr/local/nginx/conf
+    # 编辑nginx.conf
+    worker_processes  1;
+      
+    events {
+    worker_connections  1024;
+    }
+      
+    http {
+        include       mime.types;
+        default_type  application/octet-stream;
+    
+        sendfile        on;
+        keepalive_timeout  65;
+    
+        server {
+            listen 443 ssl;
+            server_name fangjie.site www.fangjie.site;
+            ssl_certificate /usr/local/nginx/cert/www.fangjie.site.pem;
+            ssl_certificate_key /usr/local/nginx/cert/www.fangjie.site.key;
+    		# 支持0-RTT 测试的前提是你的浏览器支持0RTT
+    		# 通过https://ssl.haka.se/检测
+            ssl_early_data on;
+            ssl_ciphers TLS13-AES-256-GCM-SHA384:TLS13-CHACHA20-POLY1305-SHA256:TLS13-AES-128-GCM-SHA256:TLS13-AES-128-CCM-8-SHA256:TLS13-AES-128-CCM-SHA256:EECDH+CHACHA20:EECDH+CHACHA20-draft:EECDH+ECDSA+AES128:EECDH+aRSA+AES128:RSA+AES128:EECDH+ECDSA+AES256:EECDH+aRSA+AES256:RSA+AES256:!MD5;
+            ssl_protocols               TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
+            ssl_ecdh_curve              X25519:P-256:P-384:P-521;
+            ssl_prefer_server_ciphers   on;
+    
+            location / {
+            proxy_set_header Early-Data $ssl_early_data;
+                root   html;
+                index  index.html index.htm;
+            }
+        }
+    }
+    # 重启nginx
+    ➜  conf ../sbin/nginx -s reload
+    ```
+
+    使用https://www.ssllabs.com/来测试我自己的网站的得分。
+
+    ![ssllabs得分](raws/HTTPS优化/ssllabs得分.png)
 
 ## 0X07 总结
+
+## 0x08 参考
+
+- 官方文档：http://nginx.org/en/docs/http/ngx_http_ssl_module.html
+- 浏览器打开TLS 1.3：https://geekflare.com/enable-tls-1-3-in-browsers/
+- Cerbot nginx配置：https://github.com/certbot/certbot/blob/master/certbot-nginx/certbot_nginx/tls_configs/options-ssl-nginx-tls13-session-tix-on.conf
+- SSL评分工具：https://www.ssllabs.com
+- 浏览器支持套件：https://ssl.haka.se
+- JerryQu博文：https://imququ.com/post/enable-tls-1-3.html
+
+
 
