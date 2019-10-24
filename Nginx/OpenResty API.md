@@ -516,3 +516,108 @@ ngx.say(data)
 
   通过shared dict来共享一个变量，在定时器中去判断该变量，决定是否运行。
 
+## 正则
+
+OpenResty中，处理正则应该使用`ngx.re.*`系列的API。
+
+- `ngx.re.split`：由`lua-resty-core`提供，其使用温度在`lua-resty-core/lib/ngx/re.md`
+
+OpenResty还提供一个指令：
+
+- `lua_regex_match_limit`：：限制PCRE正则引擎的回溯次数，避免灾难回溯(ReDos)。
+
+## 时间
+
+- `ngx.time`：返回时间戳，单位为秒。
+- `ngx.now`：返回时间戳，浮点数类型，能精确到毫秒
+- `ngx.update_time`：更新nginx的缓存时间，会有系统消耗。
+- `ngx.localtime`
+- `ngx.utctime`
+- `ngx.cookie_time`
+- `ngx.http_time`
+- `ngx.parse_http_time`
+
+注意，如果有阻塞网络IO操作触发，会一直返回缓存的时间，而不是当前最新的时间。这是因为事件循环中会主动更新缓存的时间。
+
+```lua
+ngx.say(ngx.now())
+os.excute('sleep 1')
+ngx.say(ngx.now()) -- 前后时间相同
+
+ngx.say(ngx.now())
+ngx.sleep(1)   -- 非阻塞方法，长耗时密集运算可以通过该方法让出控制权，避免其他请求得不到处理
+ngx.say(ngx.now())-- 前后时间不同
+```
+
+## 进程API
+
+`lua-nginx-module`库提供`ngx.worker.*`和`lua-resty-core`库提供`ngx.process.*`系列API，通过这些API，可以获取进程相关的信息。
+
+`ngx.worker.*`系列的API负责获取worker进程的信息：
+
+- `ngx.worker.pid`：获得进程ID。
+- `ngx.worker.id`：获得进程编号，从0开始。
+- `ngx.worker.exiting`
+- `ngx.worker.count`
+
+`ngx.process.*`系列的API负责获取父进程和特权进程的相关信息。
+
+- `ngx.process.type`
+- `ngx.process.enable_privileged_agent`
+- `ngx.process.signal_graceful_exit`
+- `ngx.process.get_master_pid`
+
+## 真值与空值
+
+在Lua中，除了`nil`和`false`之外，都是真值，`nil`也是Lua中唯一的空值。但是为了处理一些情况，OpenResty还引入了几种空值：
+
+- `ngx.null`：为了解决`nil`无法作为`table`的`value`，用于表达`table`中的空值，是一个`userdata`。
+
+- `cdata:NULL`：`LuaJIT FFI`接口调用函数返回的`NULL`指针。`cdata:NULL`是真值，但却和`nil`相等。
+
+  ```lua
+  $ ./resty -e "
+  local ffi=require 'ffi'
+  local cdata_null=ffi.new('void*',nil)
+  if cdata_null then
+  ngx.say('true')
+  end
+  "
+  true
+  
+  $ ./resty -e "
+  local ffi=require 'ffi'
+  local cdata_null=ffi.new('void*',nil)
+  ngx.say(cdata_null==nil)
+  "
+  true
+  ```
+
+- `cjson.null`：`cjson`库会将`json`中的`NULL`用`cjson.null`表示。
+
+## API性能和安全的平衡
+
+`ngx.req.get_uri_args`、`ngx.req.get_post_args`和`ngx.req.get_headers`默认只返回100个参数。如果构造了一个攻击，攻击参数在第100个参数之后，可以绕过WAF的检测。这三个API都有一个可选参数`max_*`，可以指定获取参数的个数，设置为`0`时，将返回所有的参数，但这会导致新的攻击(DDOS)。攻击者可以通过构造海量参数的请求，导致worker进程CPU满载。
+
+OpenResty为了保证向下兼容、不引入新的安全和性能问题，采用增加错误提示来解决这个问题。新的API为`args, err = ngx.req.get_post_args(max_args?)`。如果参数超过预设值，err会为`truncated`。这是一种平衡，由逻辑来进行判断如何处理。
+
+在安全方面可以采用两种防护方式：
+
+- 主动：身份验证，非白即黑
+- 被动：黑名单，非黑即白
+
+```python
+if is_hacker():
+	deny()
+else:
+	access()
+
+if is_admin():
+	access()
+else:
+	deny()
+```
+
+## 如何找到高质量第三方库
+
+可以从`awesome-resty`中查找相关的第三方库，考虑因素有：作者、测试覆盖、star数、活跃度、接口封装。`lua-resty-requests`是一个不错的HTTP第三方库，类似Python的Request库，如`local r, err = requests.get({ url = url, ... })`。Lua在参数固定时，可以省略括号，但不推荐。
