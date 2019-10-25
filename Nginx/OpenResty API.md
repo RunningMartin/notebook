@@ -621,3 +621,34 @@ else:
 ## 如何找到高质量第三方库
 
 可以从`awesome-resty`中查找相关的第三方库，考虑因素有：作者、测试覆盖、star数、活跃度、接口封装。`lua-resty-requests`是一个不错的HTTP第三方库，类似Python的Request库，如`local r, err = requests.get({ url = url, ... })`。Lua在参数固定时，可以省略括号，但不推荐。
+
+断点调试库`lua-resty-repl`
+
+## 实战：实现Memcached Server
+
+### 原始需求
+
+- 目的：为什么要实现memcached server？
+
+  有些老版本的浏览器，不支持HTTPS中的`Session Ticket`，只支持`Session ID`。因此服务器必须在内存中保存一份`Session ID`对应的信息，这些可以使用`Memcached`来保存。
+
+- 为什么不使用已有的MemCached产品或Redis？
+
+  引入新的产品需要引入一个新的进程，增加部署和维护成本。该Memcached只需要支持set、get和过期操作即可，使用OpenResty的Stream模块，可以很快实现该需求。
+
+- Memcached的协议？
+
+  Memcached支持tcp和udp，可以使用tcp来实现，其具备以下操作：
+
+  - `get key`：返回值`VALUE key flags exptime value END`
+  - `set key flags exptime bytes value`
+  - 错误处理：为了兼容Memcached，采用和官方相同的错误信息
+    - `ERROR\r\n`：客户端发送了不存在的请求。
+    - `SERVER_ERROR <error>`：服务器发生错误。
+    - `CLIENT_ERROR <error>`：客户端错误，如参数错误。
+
+### 方案
+
+- 采用`stream-lua-nginx-module`来处理四层流量。
+- 采用`shared_dict`来存储数据，支持`get`、`set`和超时时间设置，并且能在进程间共享。
+
