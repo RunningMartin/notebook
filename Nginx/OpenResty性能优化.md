@@ -240,3 +240,167 @@ https://github.com/apache/incubator-apisix/blob/master/CODE_STYLE.md
 
 https://github.com/openresty/luajit2
 
+## 调试手段
+
+### 断点和日志打印
+
+- 针对能复现的bug，可以通过断点和增加日志：`ngx.say`、`ngx.log`。
+- Mozilla RR：录制程序的行为，反复播放。
+
+### 分布式场景
+
+- 采用二分查找排除
+- OpenTracing、ZipKin
+
+### 动态调试工具
+
+动态调试主要针对线上环境。
+
+- systemtap
+
+systemtap拥有自己的DSL，用于设置探测点。
+
+```bash
+# 安装sudo apt install systemtap
+# hello-world.stp
+probe begin{
+    print("hello world");
+    exit();
+}
+sudo stap hello-world.stp
+```
+
+工作原理：systemtap将脚本转换为C，运行系统C编译器创建kernel模块，当模块被加载时，会hook内核，激活探测事件。可以参考《Systemtap tutorial》。
+
+- ebpf：启动速度快，内核支持，并且直接使用C语言。
+- Vtune
+- 火焰图
+
+## OpenResty工具包
+
+OpenResty中有两个开源项目：`openresty-systemtap-toolkit`和`stapxx`，提供了与nginx和OpenResty相关的systemtap工具包。覆盖on CPU、off CPU、共享字典、垃圾回收、请求延迟、内存池、连接池、文件访问等场景。
+
+OpenResty 1.15.8默认开启LuaJIT GC64模式，因此这两个工具包可能不能使用，建议使用1.13。
+
+- 共享字典
+
+  ```bash
+  # -p worker pid
+  # -f 指定dict和key
+  ./ngx-lua-shdict -p worker_pid -f --dict doct_name --key key --luajit20
+  # -w 追踪指定key的字典写操作
+  ./ngx-lua-shdict -p worker_pid -w --key key --luajit20
+  # 核心是探针，探测ngx_http_lua_shdict_set_helper，在lua-nginx-module/src/ngx_http_lua_shdict.c中
+  probe process("$nginx_path").function("ngx_http_lua_shdict_set_helper")
+  ```
+
+- CPU：常见的性能问题表现为两类，即CPU占用过高(性能瓶颈，on cpu)和CPU占用过低(阻塞函数，off cpu)，可以通过火焰图确认。
+
+  - C级别的on CPU火焰图：`systemtap-toolkit`中的`sample-bt`，可以针对任意进程的调用栈取样。
+
+    ```bash
+    ./sample-bt -p pid -t 采样时间长度 -u > a.bt
+    stackcollapse-stap.pl a.bt > a.cbt
+    # 生成火焰图
+    flamegraph.pl a.cbt >a.svg
+    ```
+
+  - Lua级别的on CPU火焰图：`stapxx`中的`lj-lua-stacks`。
+
+  - C级别的off CPU火焰图：`systemtap-toolkit`中的`sample-bt-off-cpu`
+
+    ```bash
+    ./sample-bt-off-cpu -p pid -t 采样时间长度 -u > a.bt
+    stackcollapse-stap.pl a.bt > a.cbt
+    # 生成火焰图
+    flamegraph.pl a.cbt >a.svg
+    ```
+
+  - Lua级别延迟工具`epoll-loop-blocking-distr`，对指定用户进程进行采样，并输出连续的`epoll_wait`系统调用之间的延迟分布。
+
+    ```bash
+    epoll-loop-blocking-distr.sxx -x pid --arg time=60
+    ```
+
+- 上游和阶段跟踪：cosocket或proxy_pass上游模块。可以使用`ngx-lua-tcp-recv-time`、`ngx-lua-udp-recv-time`和`ngx-single-req-latency`分析。`ngx-single-req-latency`分析单个请求在OpenResty中各个阶段的耗时。
+
+  ```bash
+  ./ngx-single-req-latency.sxx -x pid
+  ```
+
+## wrk和火焰图使用
+
+demo位置：https://github.com/iresty/lua-performance-demo
+
+- 压测工具：`wrk`
+- CPU查看：`htop`
+- 火焰图：查找性能分析点
+
+## 缓存
+
+设计缓存的参考资料《高性能Mysql》，缓存的原则：
+
+- 越靠近用户的请求越好
+- 尽量使用本进程和本机缓存。
+
+OpenResty提供了两个缓存的组件：
+
+- shared dict缓存：只能缓存字符串，且只有一份，每个worker都可以访问。
+- lru缓存：能缓存所有的lua对象，只能由单个worker进程访问。
+
+使用缓存时，应该搭配使用环境：
+
+- 不在worker之间共享：lru
+- 在worker之间共享：lru的基础上加shared dict。
+
+### 共享字典缓存
+
+shared dict必须在配置文件中使用，因此如果空间不足，只能修改配置文件后，重新加载才可以，不能动态扩缩容。
+
+- 缓存数据的序列化：共享字典只能缓存字符串，因此其他对象必须使用cjson做序列化和反序列化，这个操作耗CPU，因此最好避免序列化与反序列化，一定要使用的话，可以缓存在lru中。
+- stale数据：共享字典可以通过`get_stale`获取已经过期的数据，但是如果过期数据占用的资源被回收时时，则没有过期数据(LRU)。过期数据使用场景：当MySQL中获取的数据过期后，可以先判断MySQL的数据是否发生变化，没有发生变化，则修改缓存的过期时间。
+
+### lru缓存
+
+lru缓存只支持5个接口：
+
+- `new`
+- `set`
+- `get`
+- `delete`
+- `flush_all`
+
+```lua
+local lrucache = require "resty.lrucache"
+local cache, err =lrucache.new(200)
+cache:set('dog',21,0.01)
+ngx.sleep(1)
+-- 数据过期后，将返回过期数据
+local data,stale_data=cache:get("dog")
+```
+
+通常采用版本号来标识不同的数据，因此可以将get方法进行修改。
+
+```lua
+local function get(key,version,create_obj_func,...)
+    local obj,stale_obj=lru_obj:get(key)
+    -- 数据存在，且未过期，返回缓存数据
+    if obj and obg._version == version then
+        return obj
+    end
+    
+    -- 数据过期，且版本未修改，则返回过期数据
+    if stale_obj and stale_obj._version==version then
+    	lru_obj:set(key,stale_obg,ttl)
+         return stale_obj;
+    end
+    
+    -- 找不到数据或版本不对，则重新获得数据，缓存
+    local obj,err = create_obj_func(...)
+    obj._version=version
+    lru_obj:set(key,obj,ttl)
+    return obj,err
+end
+```
+
+将版本信息从key中隔离还有一个好处，如果key_version作为key，则会创建多个键值对，但是分离后，永远只有一份。
