@@ -176,7 +176,7 @@ local res,err=ngx_re.split('a,b,c,d',',',nil,{pos=5})
 
 #### 请求头部
 
-- `ngx.req.get_headers`：只返回前100个header，超过返回``truncated`。
+- `ngx.req.get_headers`：只返回前100个header，超过返回`truncated`。
 - `ngx.var.http_xxx`：获取具体的header参数。
 - `ngx.req.set_header`：添加header，多个不覆盖。
 - `ngx.req.clear_header`：清理header的值。
@@ -326,7 +326,7 @@ OpenResty提供cosocket来实现非阻塞网络IO，它依赖于Lua协程特性�
 
 ![协程切换流程]()
 
-出现网络I/O时，cosocket通过yield主动交出控制权，然后把网络事件注册到Nginx中；当条件满足后，Nginx通过resume唤醒协议继续处理。
+出现网络I/O时，cosocket通过yield主动交出控制权，然后把网络事件注册到Nginx中；当条件满足后，Nginx通过resume唤醒协程继续处理。
 
 #### TCP API
 

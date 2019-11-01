@@ -9,40 +9,46 @@ TLS协议由几个子协议组成：
 - 握手协议：两端进行握手、交换证书并协商会话密钥。
 - 变更密码规范：通知对端，后续数据将加密。
 
-常见的TLS协议实现是OpenSSL。学习TLS时需要使用wireshark进行抓包，抓包前有两个准备工作：
+常用的TLS协议分为两个版本：TLS 1.2和TLS 1.3，通常采用OpenSSL实现TLS协议。
 
-- 配置环境变量：`SSLKEYLOGFILE`，保存浏览器握手信息。
+## 0X01 准备
+
+学习TLS时可以搭配wireshark抓包验证。分析抓包时，切记TLS协议中传输的单位是记录，多个记录可以使用同一个TCP报文发送。抓包前有两个准备工作：
+
+- 保存握手信息：添加环境变量`SSLKEYLOGFILE`，保存浏览器握手信息。
 ```bash
 ➜  ~ cat .profile
 export SSLKEYLOGFILE=/home/fangjie/Desktop/ssl.log
 ➜  ~ source .profile# 保险起见可以重启下
 ```
 
-- 配置wireshark：`Edit -> Preferences -> Protocols -> SSL`
+- wireshark读取握手信息：`Edit -> Preferences -> Protocols -> SSL`
 
 ![wireshark准备工作](raws/TLS协议/wireshark准备工作.png)
 
-TLS协议通过密码套件确定整个通信流程中将使用的加密方法，如：
+TLS协议通过密码套件确定整个流程中将使用的加密方法，如：
 
 ![密码套件,图片来源于极客时间](raws/TLS协议/密码套件.png)
 
 - ECDHE：负责密钥交换。
 - RSA：证书验证算法，用于身份验证。
 - AES_128_GCM：使用128位GCM分组工作模式的AES算法进行对称加密。
-- SHA256：摘要算法，保证对称加密中数据的完整性。
+- SHA256：摘要算法，保证数据的完整性。
 
-## 0X01 TLS1.2
+## 0X02 TLS1.2
 
-TLS1.2协议中，常见的密钥交换算法有两种：RSA、ECDHE。ECDHE采用ECC的DH算法，在安全强度和性能上都有明显优势，`160`位的ECC相当于`1024`为的RSA，`224`位相当于`2048`位的RSA。由于ECDHE的密钥短，相应的计算量、消耗的内存和带宽也少了，性能有较大提升。
+TLS1.2协议中，常见的密钥交换算法有两种：RSA、ECDHE。ECDHE采用ECC算法，在安全强度和性能上都有明显优势，`160`位的ECC相当于`1024`为的RSA，`224`位相当于`2048`位的RSA。由于ECDHE的密钥短，相应的计算量、消耗的内存和带宽也少了，性能有较大提升。
 
-现在常用的TLS协议为TLS 1.2和TLS 1.3版本，其中TLS1.2中由于密钥交换算法的不同，握手也不相同，主要分为两大类：
+TLS1.2按密钥交换算法的不同，握手流程可以分为两大类：
 
 - RSA
 - ECDHE
 
-## 0X02 RSA握手流程
+## 0X03 RSA握手流程
 
-分析TLS协议的流程时，要切记TLS协议中传输的单位是记录，多个记录能使用同一个TCP报文发送给对端。RSA握手流程中，对称加密的`pre_master`是由客户端生成，然后通过服务器的公钥进行加密，传输给服务器。服务器和客户端通过`Pre-Master`生成对称加密的`Master Secret`。
+RSA握手流程中，对称加密的`pre_master`是由客户端生成，通过服务器的公钥进行加密，传输给服务器。服务器和客户端再通过`Pre-Master`生成对称加密的`Master Secret`。
+
+![TLS1.2 RSA握手流程,图片来源于极客时间](raws/TLS协议/TLS1.2 RSA握手流程.png)
 
 - 客户端向服务端发送`Client Hello`：随机数C、TLS版本号、密码套件列表。
 
@@ -64,7 +70,7 @@ TLS1.2协议中，常见的密钥交换算法有两种：RSA、ECDHE。ECDHE采�
 
   ![TLS1.2 服务器Change_Cipher](raws/TLS协议/TLS1.2 服务器Change_Cipher.png)
 
-## 0X03 ECDHE握手流程
+## 0X04 ECDHE握手流程
 
 ECDHE算法通过ECC算法来实现秘钥交换，其基本原理是：
 
@@ -73,7 +79,9 @@ ECDHE算法通过ECC算法来实现秘钥交换，其基本原理是：
 - 服务器生成随机值Rb，计算ECDHE参数`Pb(x,y)=Rb*Q(x,y)`。
 - 客户端和服务器交换生成的ECDHE参数，然后计算`S=Sa(x,y)=Ra*Pb(x,y)=Sb(x,y)=Rb*Pa(x,y)`，选取S的x轴作为`Pre-Master`，再根据`Pre-Master`生成`Master Secret`。
 
-ECDHE的握手流程只是在RSA握手流程上做了密钥交换的调整：
+ECDHE算法不再由客户端生成`Pre-Master`，而是通过一个难以逆运算的椭圆曲线算法，通过交换随机数和曲线的结果来实现密钥交换，相比RSA算法更安全。
+
+![TLS1.2 ECDHE握手流程,图片来源于极客时间](raws/TLS协议/TLS1.2 ECDHE握手流程.png)
 
 - 客户端向服务器端发送`Client Hello`：随机数C、TLS版本号、密码套件列表。
 
@@ -98,7 +106,7 @@ ECDHE的握手流程只是在RSA握手流程上做了密钥交换的调整：
   ![TLS1.2 服务器Change_Cipher](raws/TLS协议/TLS1.2 服务器Change_Cipher.png)
 
 
-## 0X04 TLS1.3协议
+## 0X05 TLS1.3协议
 
 截止现在，TLS1.2协议已经诞生11年了，TLS1.2协议面对现在的互联网已力不从心了，因此TLS1.3协议诞生了。TLS1.3协议主要在三方面做了改进：兼容、安全和性能。
 
@@ -122,7 +130,7 @@ Handshake Protocol: Client Hello
 
 ![TLS1.3握手流程,图片来源于极客时间](raws/TLS协议/TLS1.3握手流程.png)
 
-## 0X05 TLS1.3 的握手流程
+## 0X06 TLS1.3 的握手流程
 
 TLS1.3为了兼容TLS协议的设备，其`Client Hello`的`TLS Version`、`Client Random`和`Cipher Suites`字段和TLS1.2协议相同，只通过扩展字段描述TLS1.3协议所需信息，下面的测试使用的网站是https://www.nginx.com/。
 
@@ -137,6 +145,16 @@ TLS1.3为了兼容TLS协议的设备，其`Client Hello`的`TLS Version`、`Clie
 - 通过一次通信，双方已经获得`Client Radom`、`Server Random`、`Client Params`和`Server Params`，双方先计算出`Pre-Master`，再用HKDF生成`Master Secret`。
 - 服务器计算出`Master Secret`后，发出`Change Cipher Sepc`，切换到对称加密通信，因此后续的证书验证也是加密的，减少了握手时明文信息泄露。TLS1.3中多了一个`Certificate Verify`流程，使用服务器的私钥对握手数据进行签名，强化了身份验证和防篡改。
 
-## 参考
+## 0X07 总结
+
+![TLS协议](raws/TLS协议/TLS协议.png)
+
+## 0X08 参考
 
 - ECDHE计算来自：https://blog.csdn.net/mrpre/article/details/78025940
+
+- TLS1.2连接过程解析：https://time.geekbang.org/column/article/110354
+
+- TLS1.3连接过程解析：https://time.geekbang.org/column/article/110718
+
+  
