@@ -121,3 +121,6 @@ Client real ip: 192.168.1.1
 ### 注意
 
 - `set_real_ip_from`、`real_ip_header`不要放在`location`中，否则`remote_addr`将不会生效。
+## SERVER_REWRITE
+
+`SERVER_REWRITE`和`REWRITE`阶段将由`ngx_http_rewrite_module`模块负责处理。`rewrite`
