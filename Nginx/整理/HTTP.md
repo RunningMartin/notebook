@@ -207,3 +207,124 @@ http {
 - `error_page`：`ngx_http_core_module`模块中的`error_page`指令用于处理正常请求的错误码，能重写错误码并指定返回的内容，如果`return`指令生效后，`error_page`将无法处理。
 - `rewrite`指令执行完毕后，会向客户端返回最终uri指向的数据。
 
+## FIND_CONFIG
+
+### 理论
+
+`FIND_CONFIG`阶段由`Nginx`框架负责处理，主要功能是查找处理请求的`location`指令块。该阶段有两个重要指令：
+
+- `location`：匹配URI
+  - 前缀字符串：常规字符串、`=`(精确匹配)、`^~`(匹配上后不再进行正则表达式匹配)
+  - 正则表达式：`~`(大小写敏感)、`~*`(大小写不敏感)
+  - 内部跳转：`@`
+- `merge_slashes`：是否合并`uri`中的双斜杠。
+
+### 匹配顺序
+
+![location匹配顺序]()
+
+- 前缀字符串匹配
+  - 匹配到精确匹配时，则使用该location。
+  - 匹配到`^~`匹配时，则使用该location；匹配到多个location时，采用最长前缀的location。
+  - 记住最长匹配，进入正则表达式匹配
+- 正则表达式匹配，按定义顺序执行
+  - 匹配上，则使用正则表达式指定的location。
+  - 全部未匹配，则采用最长匹配的前缀字符串location。
+
+### 实践
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+
+	server {
+		listen 8000;
+		server_name location.fangjie.site,localhost;
+		error_log logs/myerror.log notice;
+		merge_slashes on;
+		
+		# 测试精确匹配，只匹配/Test1
+		location = /Test1 {
+			return 200 'match:= /Test1';
+		}
+		# 前缀字符串匹配，匹配后，不会执行正则匹配
+		# 匹配/Test1开头,但是优先级比 =/Test1低
+		location ^~ /Test1 {
+			return 200 'match:^~ /Test1';
+		}
+		# 测试多个^~时，取最长匹配
+		location ^~ /Test1/Test2 {
+			return 200 'match:^~ /Test1/Test2';
+		}
+		# 大小写敏感，正则表达式匹配，不会被匹配到，因为^~拦截了
+		location ~ /Test1/$ {
+			return 200 'match:~ /Test1/\n';
+		}
+		
+		# 常规前缀匹配
+        location /Test3 {
+            return 200 'match:/Test3';
+        }
+		# 常规前缀匹配，获取最长匹配
+        location /Test3/Test2 {
+            return 200 'match:/Test3/Test2';
+        }
+
+		
+		# 测试常规匹配后，进行正则表达式匹配
+		location /Test4 {
+            return 200 'match:/Test4';
+        }
+		location ~ /Test4/Test3/(\w+) {
+			return 200 'match:~ /Test4/Test3/(\w+)\n';
+		}
+		
+		# 正则表达式大小写敏感
+		location ~ /Test2/(\w+) {
+			return 200 'match:~ /Test2/\n';
+		}
+		# 大小写不敏感，正则表达式匹配
+		location ~* /Test5/(\w+)$ {
+			return 200 'match:~* /Test5\n';
+		}
+	}
+}
+```
+
+测试用例
+
+```bash
+# 测试精确匹配
+curl location.fangjie.site/Test1
+# 测试^~匹配
+curl location.fangjie.site/Test1/a
+# 测试多个^~时，按最长匹配
+curl location.fangjie.site/Test1/Test2
+
+# 测试常规前缀匹配
+curl location.fangjie.site/Test3
+# 测试多个常规前缀匹配时，取最长
+curl location.fangjie.site/Test3/Test2
+
+# 测试常规匹配后，执行正则表达式匹配失败
+curl location.fangjie.site/Test4/qa
+# 测试常规匹配后，执行正则表达式匹配成功
+curl location.fangjie.site/Test4/Test3/qa
+
+# 测试匹配正则表达式，大小写敏感
+curl location.fangjie.site/Test2/qa
+curl location.fangjie.site/test2/qa
+# 测试匹配正则表达式，大小写不敏感
+curl location.fangjie.site/Test5/qa
+curl location.fangjie.site/test5/qa
+```
+
+## PRE_ACCESS
