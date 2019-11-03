@@ -36,7 +36,7 @@ char *ngx_module_names[] = {
 
 当请求到来后，Nginx会依次调用阶段对应的模块，处理请求。
 
-## POST_READ
+## POST_READ阶段
 
 ### 理论
 
@@ -57,7 +57,7 @@ HTTP中有三种方法用于获取客户端的真实IP：
 - `real_ip_header`：指定`remote_addr`来源，如果采用X-Forwarded-For时，取末尾IP。
 - `real_ip_recursive`：为`on`时，根据`X-Forwarded-For`，从右到左找第一个不是`set_real_ip_from`指定的IP。
 
-### 实践
+### 实验
 
 ```nginx
 # 编辑nginx.conf
@@ -99,7 +99,7 @@ http {
 ### 注意
 
 - `set_real_ip_from`、`real_ip_header`不要放在`location`中，否则`remote_addr`将不会生效。
-## SERVER_REWRITE
+## SERVER_REWRITE阶段
 
 ### 理论
 
@@ -140,7 +140,7 @@ http {
 - 大小写不敏感：`~*`、`!~*`
 
 
-### 实践
+### 实验
 
 ```nginx
 worker_processes  1;
@@ -207,7 +207,7 @@ http {
 - `error_page`：`ngx_http_core_module`模块中的`error_page`指令用于处理正常请求的错误码，能重写错误码并指定返回的内容，如果`return`指令生效后，`error_page`将无法处理。
 - `rewrite`指令执行完毕后，会向客户端返回最终uri指向的数据。
 
-## FIND_CONFIG
+## FIND_CONFIG阶段
 
 ### 理论
 
@@ -216,12 +216,12 @@ http {
 - `location`：匹配URI
   - 前缀字符串：常规字符串、`=`(精确匹配)、`^~`(匹配上后不再进行正则表达式匹配)
   - 正则表达式：`~`(大小写敏感)、`~*`(大小写不敏感)
-  - 内部跳转：`@`
+  - 定义内部跳转：`@`
 - `merge_slashes`：是否合并`uri`中的双斜杠。
 
 ### 匹配顺序
 
-![location匹配顺序]()
+![location匹配顺序](../raw/HTTP/location匹配顺序.png)
 
 - 前缀字符串匹配
   - 匹配到精确匹配时，则使用该location。
@@ -231,7 +231,7 @@ http {
   - 匹配上，则使用正则表达式指定的location。
   - 全部未匹配，则采用最长匹配的前缀字符串location。
 
-### 实践
+### 实验
 
 ```nginx
 worker_processes  1;
@@ -246,8 +246,8 @@ http {
     keepalive_timeout  65;
 
 	server {
-		listen 8000;
-		server_name location.fangjie.site,localhost;
+		listen 80;
+		server_name fangjie.site;
 		error_log logs/myerror.log notice;
 		merge_slashes on;
 		
@@ -283,8 +283,8 @@ http {
 		location /Test4 {
             return 200 'match:/Test4';
         }
-		location ~ /Test4/Test3/(\w+) {
-			return 200 'match:~ /Test4/Test3/(\w+)\n';
+		location ~ /Test4/T/(\w+) {
+			return 200 'match:~ /Test4/T/(\w+)\n';
 		}
 		
 		# 正则表达式大小写敏感
@@ -299,35 +299,13 @@ http {
 }
 ```
 
-测试用例
+测试结果
 
-```bash
-# 测试精确匹配
-curl location.fangjie.site/Test1
-# 测试^~匹配
-curl location.fangjie.site/Test1/a
-# 测试多个^~时，按最长匹配
-curl location.fangjie.site/Test1/Test2
+![location 测试结果](../raw/HTTP/location 测试结果.png)
 
-# 测试常规前缀匹配
-curl location.fangjie.site/Test3
-# 测试多个常规前缀匹配时，取最长
-curl location.fangjie.site/Test3/Test2
 
-# 测试常规匹配后，执行正则表达式匹配失败
-curl location.fangjie.site/Test4/qa
-# 测试常规匹配后，执行正则表达式匹配成功
-curl location.fangjie.site/Test4/Test3/qa
 
-# 测试匹配正则表达式，大小写敏感
-curl location.fangjie.site/Test2/qa
-curl location.fangjie.site/test2/qa
-# 测试匹配正则表达式，大小写不敏感
-curl location.fangjie.site/Test5/qa
-curl location.fangjie.site/test5/qa
-```
-
-## PRE_ACCESS
+## PRE_ACCESS阶段
 
 `PRE_ACCESS`阶段负责限制客户端的并发连接数和请求数，该阶段有两个模块：`ngx_http_limit_req_module`和`ngx_http_limit_conn_module`。`limit_conn`模块用于限制客户端的并发连接数，`limit_req`模块用于限制客户端每秒的请求数。
 
@@ -344,7 +322,7 @@ curl location.fangjie.site/test5/qa
 - `limit_conn_log_level info | notice | warn | error`：发生限制时，记录的日志级别。
 - `limit_conn_status code`：发生限制时，返回的响应码。
 
-#### 实践
+#### 实验
 
 ```nginx
 worker_processes  1;
@@ -360,8 +338,8 @@ http {
 	# 以binary_remote_addr作为key，创建一个10M的共享空间，空间名为addr
 	limit_conn_zone $binary_remote_addr zone=addr:10m;
 	server {
-		listen 8000;
-		server_name limitconn.fangjie.site,localhost;
+		listen 80;
+		server_name fangjie.site;
 		error_log logs/myerror.log notice;
 		
 		location / {
@@ -376,13 +354,9 @@ http {
 }
 ```
 
-验证结果
+测试结果：
 
-```bash
-# 两个客户端同时发起请求
-curl http://limitconn.fangjie.site
-tail -n 1 logs/myerror.log
-```
+![limit_conn测试结果](../raw/HTTP/limit_conn测试结果.png)
 
 ### limit_req
 
@@ -390,7 +364,7 @@ tail -n 1 logs/myerror.log
 
 `limit_req`模块用于限制客户端每秒的请求数，默认编入nginx，编译时，可使用`--without-http_limit_req_module`禁用该模块。`limit_req`模块基于共享内存，因此在全部worker进程中都生效，其限制的有效性取决于`POST_READ`阶段，通过`relaip`获取的IP是否真实。`limit_req`模块采用`leaky bucket`算法(漏斗算法)，它的目的是让请求速率保持恒定，使突发的流量变得平滑。
 
-![漏斗算法]()
+![漏斗算法,图片来源于极客时间](../raw/HTTP/漏斗算法.jpg)
 
 漏桶算法的核心是建立一个缓冲区，通过固定的速率消费缓冲的请求，如果缓冲区满，则拒绝掉请求。
 
@@ -403,7 +377,7 @@ tail -n 1 logs/myerror.log
 - `limit_req_log_level info | notice | warn | error`：发生限制时，记录的日志级别。
 - `limit_red_status code`：发生限制时，返回的响应码。
 
-#### 实践
+#### 实验
 
 ```nginx
 worker_processes  1;
@@ -420,8 +394,8 @@ http {
 	# 每分钟消费一个请求
 	limit_req_zone $binary_remote_addr zone=one:10m rate=1r/m;
 	server {
-		listen 8000;
-		server_name limitreq.fangjie.site,localhost;
+		listen 80;
+		server_name fangjie.site;
 		error_log logs/myerror.log notice;
 		
 		location / {
@@ -436,6 +410,10 @@ http {
 }
 ```
 
+测试结果：
+
+![limit_req测试结果](../raw/HTTP/limit_req测试结果.png)
+
 ## ACCESS阶段
 
 `ACCESS`阶段负责处理用户的访问权限，包含三个模块：`ngx_http_access_module`、`ngx_http_auth_basic_module`和`ngx_http_auth_request_module`。`access`模块用于IP黑白名单，`auth_basic`模块用于`HTTP Basic Authentication`认证、`auth_request`模块可以使用第三个做权限控制。
@@ -449,7 +427,7 @@ http {
 - ` allow address | CIDR | unix: | all`：设置白名单
 - ` deny address | CIDR | unix: | all`：设置黑名单
 
-#### 实践
+#### 实验
 
 ```nginx
 worker_processes  1;
@@ -463,8 +441,8 @@ http {
     sendfile        on;
     keepalive_timeout  65;
 	server {
-		listen 8000;
-		server_name access.fangjie.site,localhost;
+		listen 80;
+		server_name fangjie.site;
 		error_log logs/myerror.log notice;
 		set_real_ip_from 127.0.0.1;
 		real_ip_header X-Real-IP;
@@ -476,11 +454,9 @@ http {
 }
 ```
 
-实验结果
+测试结果：
 
-```bash
-curl -H 'X-Real-IP:192.168.0.1' http://127.0.0.1:8000
-```
+![access测试结果](../raw/HTTP/access测试结果.png)
 
 ### auth_basic
 
@@ -488,17 +464,17 @@ curl -H 'X-Real-IP:192.168.0.1' http://127.0.0.1:8000
 
 `auth_basic`模块基于`RFC2617:HTTP Basic Authentication`协议，对用户名和密码进行认证，默认编入nginx，可使用`--without-http_auth_basic_module disable ngx_http_auth_basic_module`关闭该模块。
 
-![HTTP Basic Authentication流程]()
+![HTTP Basic Authentication流程,图片来源于极客时间](../raw/HTTP/Basic认证流程.png)
 
 该模块提供两个指令：
 
 - `auth_basic string | off`：是否打开认证，打开时，`string`为弹窗title。
 - `auth_basic_user_file file`：设置用户名和密码文件位置，格式为`username:password`。
 
-#### 实践
+#### 实验
 
 先通过httpd-tools包中命令
-`htpasswd –c file –b user pass`创建密码文件。
+`htpasswd –b –c file  user pass`创建密码文件。
 
 ```nginx
 worker_processes  1;
@@ -512,8 +488,8 @@ http {
     sendfile        on;
     keepalive_timeout  65;
 	server {
-		listen 8000;
-		server_name access.fangjie.site,localhost;
+		listen 80;
+		server_name fangjie.site;
 		error_log logs/myerror.log notice;
 		set_real_ip_from 127.0.0.1;
 		real_ip_header X-Real-IP;
@@ -524,6 +500,10 @@ http {
 	}
 }
 ```
+
+测试结果：
+
+![auth_basic测试结果](../raw/HTTP/auth_basic测试结果.png)
 
 ### auth_request
 
@@ -536,7 +516,9 @@ http {
 - `auth_request uri | off`：打开认证时，将把子请求转发给`uri`。
 - `auth_request_set $variable value`：设置变量，用于后续判断。
 
-#### 实践
+#### 实验
+
+该实验需要有启动两个Nginx服务，上游服务的配置为：
 
 ```nginx
 worker_processes  1;
@@ -551,7 +533,34 @@ http {
     keepalive_timeout  65;
 	server {
 		listen 8000;
-		server_name access.fangjie.site,localhost;
+		server_name localhost;
+		error_log logs/myerror.log notice;
+        location / {
+            if ($remote_addr = 127.0.0.1){
+                return 200;
+            }
+            return 400;
+        }
+	}
+}
+```
+
+验证服务的nginx配置为：
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+	server {
+		listen 80;
+		server_name fangjie.site;
 		error_log logs/myerror.log notice;
 		location / {
 			# uri是本机的一个反向代理，也可以是一个具体的地址
@@ -559,7 +568,7 @@ http {
 		}
 		
 		location = /auth_request{
-			proxy_pass http://127.0.0.1:8001;
+			proxy_pass http://127.0.0.1:8000;
 			# 不传递body
 			proxy_pass_request_body off;
 			proxy_set_header Content-Length '';
@@ -569,3 +578,451 @@ http {
 	}
 }
 ```
+
+![auth_request测试结果](../raw/HTTP/auth_request测试结果.png)
+
+### 注意
+
+- Nginx还提供了一个指令`satisfy all | any`，如果为`any`，则`ACCESS`阶段中任一模块通过，则进入下一阶段；如果为`all`，则要求`ACCESS`阶段中所有的模块都必须通过。
+
+## PRE_CONTENT阶段
+
+`PRE_CONTENT`阶段有两个模块`ngx_http_try_files_modules`和`ngx_http_mirror_module`模块。
+
+### try_files
+
+#### 理论
+
+`try_files`模块由`ngx_http_core_module`提供支持，该模块只有一个指令：
+
+- `try_files file ... uri|try_files file ...=code`：将依次访问指定的文件，如果文件都不存在，则将返回最后一个`uri`或`code`的结果。
+
+`try_files`指令中可以使用一个特殊参数`$uri`，表示当前的路径，路径由`root`或`alias`指定。
+
+#### 实验
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+	server {
+		listen 80;
+		server_name fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+		location /first{
+			# $uri表示html/first
+			try_files $uri $uri/index.html $uri.html @lasturl;
+		}
+        # 内部服务
+		location @lasturl{
+			return 200 'lasturl!\n';
+		}
+		location /second{
+			try_files $uri $uri/index.html $uri.html =400;
+		}
+	}
+}
+```
+
+实验结果：
+
+![try_files测试结果](../raw/HTTP/try_files测试结果.png)
+
+### mirror
+
+#### 理论
+
+`mirror`模块将生成一个子请求，然后发送给指定的URI，子请求的返回值不会影响当前模块的处理。`mirror`模块通常用于A/B测试，该模块默认编入nginx，编译时，可以使用`--without-ngx_http_mirror_module`关闭该模块。
+
+`mirror`模块提供两条指令：
+
+- `mirror uri | off`：是否打开`mirror`，打开时，子请求发往的`uri`。
+- `mirror_request_body on|off`：是否发送body。
+
+#### 实验
+
+该实验也需要两个Nginx服务，上游的Nginx配置为：
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+	server {
+		listen 8000;
+		server_name localhost;
+		error_log logs/myerror.log notice;
+        location / {
+            return 200 'hello';
+        }
+	}
+}
+```
+
+`mirror`模块Nginx配置为：
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+	server {
+		listen 80;
+		server_name fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+		location /first{
+			mirror /mirror;
+			mirror_request_body off;
+		}
+		location = /mirror {
+			internal;
+			proxy_pass http://127.0.0.1:8000$request_uri;
+			proxy_pass_request_body off;
+			proxy_set_header Content-Length "";
+			proxy_set_header X-Original-URI $request_uri;
+		}
+	}
+}
+```
+
+实验结果：
+
+![mirror测试结果](../raw/HTTP/mirror测试结果.png)
+
+## CONTENT阶段
+
+`CONTENT`阶段负责生成响应，其中包含五个模块：`ngx_http_concat_module`、`ngx_http_random_index_module`、`ngx_http_index_module`、`ngx_http_auto_index_module`、`ngx_http_static_module`。
+
+### concat
+
+#### 理论
+
+`concat`模块可以将多个小文件合并为一个响应，通过减少请求次数，提高性能。`concat`模块由`Tengine`开发，编译时，需要先下载[源码](https://github.com/alibaba/nginx-http-concat)，然后使用`--add_module path`添加模块。该模块的使用方法是通过在`url`后添加`??文件1,文件2...`，如`http://example.com/??1.js,2.js`。
+
+`concat`模块提供6个指令：
+
+- `concat on|off`：是否打开该功能。
+- `concat_delimiter string`：指定文件的分割符。
+- `content_type MIME types`：指定拼接的文件类型。
+- `concat_unique on|off`：是否只对一种文件进行拼接。
+- `concat_ignore_file_error on|off`：文件不存在时，是否忽略。
+- `concat_max_files number`：最多拼接文件个数。
+
+#### 实验
+
+编译安装流程：
+
+![concat安装](../raw/HTTP/concat安装.png)
+
+Nginx配置文件
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+	server {
+		listen 80;
+		server_name fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+		location /{
+            # 打开concat
+            concat on;
+            # 指定类型
+            concat_types text/plain;
+            # 指定分隔符
+            concat_delimiter ':::';
+            concat_max_files 2;
+		}
+	}
+}
+```
+
+实验结果：
+
+![concat实验结果](../raw/HTTP/concat实验结果.png)
+
+### random_index
+
+#### 理论
+
+`random_index`模块用于处理uri以`/`结尾的请求，将随机返回目录下一个文件作为`index`文件。该模块默认不编入Nginx，编译时，使用`--with-http_random_index_module`打开该模块。`random_index`模块只提供一个命令：
+
+- `random_index on|off`：是否打开该功能。
+
+#### 实验
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+	server {
+		listen 80;
+		server_name fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+		location /{
+            random_index on;
+		}
+	}
+}
+```
+
+实验结果：
+
+![random_index测试结果](../raw/HTTP/random_index测试结果.png)
+
+### index
+
+#### 理论
+
+`index`模块会在`url`以`/`结尾时，返回`index`指令指定的文件，默认为`index、index.html`。该模块只提供一个指令：
+
+- `index file`：指定返回的文件名。
+
+#### 实验
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+	server {
+		listen 80;
+		server_name fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+		location /{
+		}
+        location /first{
+            index first.html;
+        }
+	}
+}
+```
+
+实验结果
+
+![index测试结果](../raw/HTTP/index测试结果.png)
+
+### auto_index
+
+#### 理论
+
+`auto_index`模块会在url以`/`结尾时，返回对应目录的结构。该模块默认编入nginx，编译时，可以使用`--without-http_autoindex_module`关闭该模块。
+
+`auto_index`模块提供了四条指令：
+
+- `autoindex on|off`：是否打开该功能。
+- `autoindex_exact_size on|off`：是否返回文件精确的大小，只针对html文件有效。
+- `autoindex_format html|xml|json|jsonp`：指定返回的信息格式。
+- `autoindex_locltime on|off`：是否采用服务器本地时间。
+
+#### 实验
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+	server {
+		listen 80;
+		server_name fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+		location /{
+		}
+        location /first{
+            autoindex on;
+			autoindex_exact_size on;
+			autoindex_format json;
+        }
+	}
+}
+```
+
+![auto_index实验结果](../raw/HTTP/auto_index实验结果.png)
+
+### static
+
+#### 理论
+
+`static`模块由`ngx_http_core_module`提供，主要负责静态文件的处理。`static`模块中有两个非常重要的命令：
+
+- `alias`：将`location`匹配的uri重定向到指定目录下。
+- `root`：设置静态资源的根目录。
+
+举个简单例子：
+
+```nginx
+server {
+		listen 80;
+		server_name fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+        location /first{
+            # 访问的目录是/html/first/first
+		    root html/first;            
+		}
+        location /second {
+           
+            alias third/
+        }
+}
+```
+
+
+
+访问`/second`将获取`html/third/index.html`，而访问`/first`将获取`/html/first/first/index.html`。
+
+![root_alias比较](../raw/HTTP/root_alias比较.png)
+
+与此同时，`static`模块还提供了3个和文件路径相关的变量：
+
+- `$request_filename`：文件的完整路径。
+- `$document_root`：文件所在文件夹路径。
+- `$realpath_root`：文件的真实路径，如果存在软连接，则执行文件真正存在的位置。
+
+返回静态文件时，`static`模块提供了几个指令用于控制响应的`Content-Type`头部：
+
+- `types { text/html html; image/gif gif;}`：指定后缀名和`type`的映射关系。
+- `default_type mime-type`：指定默认类型。
+- `types_hash_bucket_size size`：指定存储在hash表中，每个映射的容量大小。
+- `types_hash_max_size size`：指定映射个数。
+- `log_not_found on|off`：找不到文件时，是否记录到日志中。
+
+如果url是向访问目录，但是没有添加`/`时，会返回301重定向，重定向的url后会添加`/`，`static`模块也提供了几个指令来控制重定向行为。
+
+- `absolute_redirect on|off`：301响应的`location`字段是否为绝对路径。
+- `server_name_in_redirect on|off`：301响应中`location`字段的域名是请求中的`host`还是配置的`server_name`。
+- `port_in_redirect on|off`：默认端口不为80时，是否在`location`中显示。
+
+#### 实验
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+	server {
+		listen 8080;
+		server_name redict.fangjie.site,fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+        location /first{
+            # 访问的目录是/html/first/first
+		    root html/first;            
+		}
+        location /second {
+            # 访问的目录是html/third
+            alias third/;
+        }
+
+		# 只返回相对路径
+		location /1 {
+			server_name_in_redirect off;
+			port_in_redirect off;
+			absolute_redirect off;
+        }
+
+		# 域名由Host字段控制
+		location /2 {
+			server_name_in_redirect off;
+			port_in_redirect off;
+			absolute_redirect on;
+        }
+		# 域名为server_name中指定，不带端口号
+		location /3 {
+			server_name_in_redirect on;
+			port_in_redirect off;
+			absolute_redirect on;
+        }
+		# 域名为server_name中指定，带端口号
+		location /4 {
+			server_name_in_redirect on;
+			port_in_redirect on;
+			absolute_redirect on;
+        }
+
+		location /types{
+			types {
+				my_txt txt;
+				text/html  html;
+				image/gif  gif;
+				image/jpeg jpg;
+			}
+		}
+
+		location /path{
+			alias html/real_path/;
+			return 200 'request_filename:$request_filename
+document_root:$document_root
+realpath_root:$realpath_root
+			';
+		}
+	}
+}
+```
+
+实验结果：
+
+![static实验结果](../raw/HTTP/static实验结果.png)
+
+
+
+## 过滤阶段
+
+## LOG阶段
