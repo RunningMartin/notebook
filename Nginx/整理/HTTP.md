@@ -1026,3 +1026,491 @@ realpath_root:$realpath_root
 ## 过滤阶段
 
 ## LOG阶段
+
+`LOG`阶段负责将HTTP请求的相关信息记录到日志中，该阶段由`ngx_http_log_module`模块负责，无法禁用。
+
+### log
+
+#### 理论
+
+`log`模块提供了三条指令用于控制日志记录：
+
+- `log_format name [escape=default|json|none] string ... `：定义log日志的格式，默认日志格式为：
+
+  ```nginx
+  log_format combined '$remote_addr - $remote_user [$time_local] '
+  '"$request" $status $body_bytes_sent ' '"$http_referer"
+  "$http_user_agent"';
+  ```
+
+- `access_log path [format [buffer=size] [gzip[=level]] [flush=time] [if=condition]];`：定义日志的存储方式。
+
+  - `path`：指定日志的存储路径，路径可以包含变量，默认为`log/access.log`。在不打开cache的情况下，每记录一条日志都需要获取文件句柄、读写磁盘，性能差。
+  - `format`：指定日志的格式，默认为`combined`。
+  - `buffer`：日志缓存，默认为64KB。
+  - `gzip`：指定压缩级别，默认为1。
+  - `flush`：将缓存中的数据写入磁盘。如果缓存写满、worker进程执行reopen命令或关闭时，也会将缓存中的日志写入磁盘。
+  - `if`：通过变量判断是否记录日志。
+
+- `open_log_file_cache max=N [inactive=time] [min_uses=N] [valid=time]`：确定是否打开日志缓存，默认值为`off`。该指令主要针对`access_log`中包含变量时，避免每次记录日志都需要获取文件句柄。
+
+  - `max`：缓存文件句柄数最大值，超过采用LRU淘汰。
+  - `inactive`：超过`inactive`后，未被访问的文件将被关闭，默认为10S。
+  - `min_uses`：`inactive`内最少访问`min_uses`次，否则将被关闭，默认为1。
+  - `valid`：超过`valid`后，将对缓存的日志文件检查是否存在，默认60S。
+
+#### 实验
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+    log_format  my_log_format  'this is my_log_format' 
+        				'$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+        				'request_length:$request_length'
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+	server {
+		listen 80;
+		server_name fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+		location /{
+			access_log logs/my_access.log my_log_format;
+        }
+	}
+}
+```
+
+实验结果：
+
+![]()
+
+## 防盗链
+
+### refer模块
+
+#### 理论
+
+`ngx_http_referer_module`模块提供防盗链功能。该模块的原理是，网站通过url引用页面后，用户点击url，浏览器会在HTTP请求的`referer`头部中将当前页面的url带上，告知服务器发起请求的页面。该模块默认编入`Nginx`，编译时，可以使用`--with-http_referer_module`禁用。
+
+`refer`模块提供三个指令：
+
+- `valid_referers none | blocked | server_names | string`：设置允许访问的条件，为真则允许。
+  - `none`：允许缺失`referer`头部。
+  - `blocked`：允许`referer`头部为空。
+  - `server_names`：对`referer`执行域名匹配。
+  - `带*通配符字符串`：对`referer`执行匹配。
+  - `正则表达式`：对`referer`执行正则匹配。
+- `referer_hash_bucket_size size`：指定每个hash的块大小，默认值为64。
+- `referer_hash_max_size size`：指定哈希的最大数量，默认值为2048。
+
+`referer`模块还提供一个变量`$invalid_referer`用于判断是否是盗链。
+
+#### 实验
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+	server {
+		listen 80;
+		server_name fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+		location /{
+			valid_referers none blocked server_names
+                *.fangjie.com www.fangjie.org.cn/nginx/
+                ~ \.google\.;
+            if ($invalid_referer){
+                return 403;
+            }
+            return 200 'valid';
+        }
+	}
+}
+```
+
+实验结果：
+
+```bash
+# 测试
+# 返回403 ，不会匹配到www.fangjie.org.cn/nginx/
+curl -H 'referer: http://www.fangjie.org.cn/ttt' fangjie.site/ -I
+# 匹配*.fangjie.com
+curl -H 'referer: http://www.fangjie.com/ttt' fangjie.site/
+# 匹配blocked
+curl -H 'referer: ' fangjie.site/
+# 匹配none
+curl fangjie.site/
+# 没有匹配
+curl -H 'referer: http://www.fangjie.site' fangjie.site/ -I
+# 匹配到server_names
+curl -H 'referer: http://fangjie.site' fangjie.site/
+# 没有匹配
+curl -H 'referer: http://image.baidu.com/search/detail' fangjie.site/ -I
+# 匹配正则表达式~ \.google\.
+curl -H 'referer: http://image.google.com/search/detail' fangjie.site/
+```
+
+### secure_link模块
+
+#### 理论
+
+`ngx_http_secure_link_module`模块的原理是服务器向客户端返回哈希后的URL，客户端通过该URL访问，nginx校验URL中的哈希值。由于哈希算法不可逆，因此客户端无法进行逆向。`secure_link`模块默认不编入nginx，编译时，使用`--with-http_secure_link_module`添加。原始URL通常包含如下信息：
+
+- 资源位置，防止攻击者拿到一个URL后访问该URL下任意资源。
+- 用户信息，，防止其他用户盗用。
+- 时间戳，让安全URL及时过期。
+- 密钥，增加攻击者逆向难度。
+
+`secure_link`模块支持两种安全连接，两种方式的hash值均为安全连接原始字符串的md5值：
+
+- `/link?md5=md5&expires=expires`，可以指定安全连接原始字符串构造方式，需要使用两个指令：
+  - `secure_link hash值,时间戳`：指定hash值和时间戳的取值。
+
+  - `secure_link_md5 expression`：指定字符串的构造方式。
+
+  - `$secure_link`：
+    - 空字符串，表示验证不通过
+    - 0，表示URL过期
+    - 1，表示验证通过。
+  - `$secure_link_expires`：时间戳的值，只能由`secure_link_md5`使用。
+
+- `/prefix/hash/link`，其安全连接原始字符串为`link密钥`，该方式只需使用一个指令：
+
+  - `secure_link_secret word`：指定密钥。
+  - `$secure_link`：为空则表示验证不通过，否则为原始URL。
+
+
+#### 实验
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+	server {
+		listen 80;
+		server_name fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+        location / {
+            # md5和过期时间从uri参数中获取
+            secure_link $arg_md5,$arg_expires;
+            # 指定原始字符串的格式：过期时间uriIP地址 密钥
+            secure_link_md5 "$secure_link_expires$uri$remote_addr secret";
+            if ($secure_link=""){
+                return 403;
+            }
+            if ($secure_link="0"){
+                return 400 'expired';
+            }
+            return 200 "secure_link:$secure_link,secure_link_expires:$secure_link_expires\n"
+        }
+        # 前缀为simple
+        location /simple/ {
+            secure_link_secret secret;
+            if ($secure_link=""){
+                return 403;
+            }
+            # 重定向到secure中，^ 匹配任意url
+            rewrite ^ /secure/$secure_link;
+        }
+        location /secure/{
+            alias html/;
+            internal;
+        }
+	}
+}
+```
+
+实验结果
+
+```bash
+date +%s
+
+# 生成hash，过期时间为1分钟
+echo -n '时间戳text1.txt127.0.0.1 secret' | openssl md5 -binary | openssl base64 | tr +/ - | tr -d =
+# 测试
+date +%s
+curl 'fangjie.site/test1.txt?md5=xxxxx&expires=xxxx'
+
+echo -n 'test1.txtsecret' | openssl md5 –hex
+curl 'fangjie.site/simple/md5/test1.txt'
+```
+
+## 创建新变量
+
+### map模块
+
+#### 理论
+
+`ngx_http_map_module`模块提供类似`switch {case:...,default:...}`语法，创建新的变量。该模块默认编入nginx，可以使用`--without-http_map_module`禁用。
+
+`map`模块提供三个指令：
+
+- `map string $variable { ... }`：添加映射关系。
+
+  ```nginx
+  map $http_user_agent $mobile {
+      default 0;
+      "~Opera Mini" 1;
+  }
+  ```
+
+- ` map_hash_bucket_size size`：每个映射的最大尺寸，默认32|64|128。
+
+- `map_hash_max_size size`：映射最大个数，默认为2048。
+
+`map`指令支持如下配置：
+
+- `default value`：设置默认值。
+- `hostnames`：可以对域名支持`*`匹配。
+- `include`：加载文件，优化可读性。
+- `volatile`：静止变量被缓存。
+
+`case`的匹配顺序为：
+
+- 严格匹配字符串。
+- 前缀匹配的最长字符串，如`*.example.com`。
+- 后缀匹配的最长字符串，`example.*`。
+- ~和~*搭配的正则匹配。
+- 默认值。
+
+#### 实验
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+    map $http_host $name{
+        hostnames;
+        default guest;
+        *.fangjie.site host;
+        fangjie.* friend_station;
+        ~www\.google\w+\.com browser; 
+    }
+	server {
+		listen 80;
+		server_name fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+		location /{
+			return 200 '$name';
+        }
+	}
+}
+```
+
+实验结果：
+
+![]()
+
+### split_clients模块
+
+#### 理论
+
+`ngx_http_split_clients`模块提供AB测试的功能，其原理是对已有变量执行MurmurHash2算法，获得一个32位无符号整数`hash`，根据百分比`hsah/(2^32-1)`为新变量赋值。该模块默认编译进入nginx，可以通过`--without-http_split_clients_module`禁用该模块。
+
+该模块提供一个指令：
+
+- `split_clients string $variable { ... }`：设置条件。
+
+  ```nginx
+  split_clients "${http_testcli}" $variant {
+           0.51%          .one;  # 0-0.51% variant为.one
+           20.0%          .two;  # 0.51-20.0% variant为.two
+           50.5%          .three;# 20.0-50.5% variant为.three
+           *              "";    # 50.5-100% variant为""
+  }
+  ```
+
+#### 实验
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+	split_clients "${http_testcli}" $variant {
+		50.00% 		A;
+		*           '';
+	}
+
+	server {
+		listen 80;
+		server_name fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+		location /{
+			if ($variant=A){
+				rewrite ^ /A;
+			}
+			return 200 'Client normal';
+		}
+        # 可以反向代理到相应的业务中。
+		location /A{
+			internal;
+			return 200 'Client A';
+		}
+	}
+}
+```
+
+![]()
+
+### geo模块
+
+#### 理论
+
+`ngx_http_geo_module`模块能根据客户端IP创建新的变量。该模块默认编入nginx，可以通过`--without-http_geo_module`禁用。该模块只有一个指令：
+
+- `geo [$address] $variable {条件}`：条件格式为`IP 值;`，如果客户端IP地址满足条件，则为变量符相应的值。如果有多个匹配，则采用最长匹配。
+
+  ```nginx
+  geo $country {
+      127.0.0.0/24 US;
+      127.0.0.1/32 CN;
+  }
+  ```
+
+`geo`指令中提供了几个配置：
+
+- `delete`：删除指定网络。
+- `default`：设置默认值。
+- `include`：加载其他文件，优化可读性。
+- `proxy`：指定可信地址(同realip)，此时`remote_addr`为`X-Forwarded-For`最后一个IP。
+- `proxy_recursive`：`remote_addr`为`X-Forwarded-For`中最后一个不可信地址。
+- `ranges`：采用范围作为条件，需放在最前面，最好采用顺序排列。
+
+#### 实验
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+    geo $country {
+        default ZZ;
+        proxy 127.0.0.1;
+        # proxy_recursive;
+        127.0.0.0/24 US;
+        127.0.0.1/32 CN;
+        10.1.0.0/16 CN;
+        192.168.1.0/24 UK;
+    }
+	server {
+		listen 80;
+		server_name fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+        
+		location /{
+            return 200 'your country:$country';
+        }
+	}
+}
+```
+
+实验结果
+
+```bash
+# 返回CN
+curl -H 'X-Forwarded-For:192.168.1.1,10.1.0.0' fangjie.site
+# 返回CN，返回最长匹配
+curl -H 'X-Forwarded-For:192.168.1.1,127.0.0.1' fangjie.site
+# 返回US
+curl -H 'X-Forwarded-For:192.168.1.1,127.0.0.5' fangjie.site
+# 打开proxy_recursive,
+sudo sbin/nginx -s reload
+# 返回UK
+curl -H 'X-Forwarded-For:192.168.1.1,127.0.0.1' fangjie.site
+```
+
+### geoip模块
+
+#### 理论
+
+`ngx_http_geoip_module`能根据IP地址获取地理位置。该模块默认没有编入nginx，使用`--with-http_geoip_module`开启。`geoip`模块依赖于[MaxMind](dev.maxmind.com/geoip/geoip2/geolite2)的开发库，安装后，还需要下载`MaxMind`提供的二进制数据库。
+
+`geoip`模块有两个功能：
+
+- 获取国家信息
+  - `geoip_country file`：配置国家信息数据库位置。
+  - `geoip_proxy address|CIDR`：可信地址。
+  - `$geoip_country_code`：两个字母的国家代码，如CN。
+  - `$geoip_country_code3`：三个字母的国家代码，如CHN。
+  - `$geoip_country_name`：国家全称，如China。
+- 获取城市信息
+  - `geoip_city file`：配置城市信息数据库位置。
+  - `$geoip_latitude`：纬度。
+  - `$geoip_longitudu`：精度。
+  - `$geoip_city_continent_code`：洲名。
+  - `$geoip_region`：州或省编码。
+  - `$geoip_region_name`：州或省名。
+  - `$geoip_city`：城市名。
+  - `$geoip_postal_code`：邮编号。
+  - `$geoip_city_country_code`：两个字母的国家代码，如CN。
+  - `$geoip_city_country_code3`：三个字母的国家代码，如CHN。
+  - `$geoip_city_country_name`：国家全称，如China。
+
+#### 实验
+
+```
+
+```
+
+## 连接管理
+
+Nginx可以通过多个HTTP请求复用同一个TCP连接，减少握手次数，降低TCP拥塞控制的影响(新建的连接受拥塞控制影响，需要一定时间才能达到最优速率)。复用TCP连接还有一个好处，并发连接数减少，也降低了服务器资源的消耗。
+
+HTTP协议中，可以通过`Connection`、`Keep-Alive`字段控制：
+
+- `Connection:close|keepalive`：`close`不复用连接；`keepalive`复用连接。
+- `Keep-Alive:timeout=n`：该连接至少保留n秒。
+
+Nginx也提供了3条指令控制连接复用：
+
+- `keepalive_disable none | browser`：指定不使用`keepalive`功能的客户端，默认值为`msie6`。
+- ` keepalive_requests number`：设置最多复用多少次，默认值为100。
+- `keepalive_timeout timeout [header_timeout]`：两次请求的最大间隔时间，默认为75秒。
