@@ -1309,7 +1309,7 @@ http {
 
 #### 理论
 
-`ngx_http_split_clients`模块提供AB测试的功能，其原理是对已有变量执行MurmurHash2算法，获得一个32位无符号整数`hash`，根据百分比`hsah/(2^32-1)`为新变量赋值。该模块默认编译进入nginx，可以通过`--without-http_split_clients_module`禁用该模块。
+`ngx_http_split_clients`模块提供AB测试的功能，其原理是对已有变量执行`MurmurHash2`算法，获得一个32位无符号整数`hash`，根据百分比`hsah/(2^32-1)`为新变量赋值。该模块默认编译进入nginx，可以通过`--without-http_split_clients_module`禁用该模块。
 
 该模块提供一个指令：
 
@@ -1317,10 +1317,10 @@ http {
 
   ```nginx
   split_clients "${http_testcli}" $variant {
-           0.51%          .one;  # 0-0.51% variant为.one
-           20.0%          .two;  # 0.51-20.0% variant为.two
-           50.5%          .three;# 20.0-50.5% variant为.three
-           *              "";    # 50.5-100% variant为""
+      0.51% .one;  # 0-0.51% variant为.one
+      20.0% .two;  # 0.51-20.51% variant为.two
+      50.5% .three;# 20.51-71.01% variant为.three
+      *     "";    # 70.01-100% variant为""
   }
   ```
 
@@ -1338,8 +1338,9 @@ http {
     sendfile        on;
     keepalive_timeout  65;
 	split_clients "${http_testcli}" $variant {
-		50.00% 		A;
-		*           '';
+        25.00%      A;
+		50.00% 		B;
+        25.00%      C;
 	}
 
 	server {
@@ -1348,21 +1349,13 @@ http {
 		error_log logs/myerror.log notice;
 		root html/;
 		location /{
-			if ($variant=A){
-				rewrite ^ /A;
-			}
-			return 200 'Client normal';
-		}
-        # 可以反向代理到相应的业务中。
-		location /A{
-			internal;
-			return 200 'Client A';
+			return 200 'variant:$variant';
 		}
 	}
 }
 ```
 
-![]()
+![split_clients实验结果](../raw/HTTP/split_clients实验结果.png)
 
 ### geo模块
 
@@ -1404,7 +1397,7 @@ http {
     geo $country {
         default ZZ;
         proxy 127.0.0.1;
-        # proxy_recursive;
+        #proxy_recursive;
         127.0.0.0/24 US;
         127.0.0.1/32 CN;
         10.1.0.0/16 CN;
@@ -1423,20 +1416,9 @@ http {
 }
 ```
 
-实验结果
+实验结果：
 
-```bash
-# 返回CN
-curl -H 'X-Forwarded-For:192.168.1.1,10.1.0.0' fangjie.site
-# 返回CN，返回最长匹配
-curl -H 'X-Forwarded-For:192.168.1.1,127.0.0.1' fangjie.site
-# 返回US
-curl -H 'X-Forwarded-For:192.168.1.1,127.0.0.5' fangjie.site
-# 打开proxy_recursive,
-sudo sbin/nginx -s reload
-# 返回UK
-curl -H 'X-Forwarded-For:192.168.1.1,127.0.0.1' fangjie.site
-```
+![geo实验结果](../raw/HTTP/geo实验结果.png)
 
 ### geoip模块
 
