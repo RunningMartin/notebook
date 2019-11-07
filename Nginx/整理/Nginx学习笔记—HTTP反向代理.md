@@ -69,7 +69,7 @@ location /a {
 
   ```nginx
   # 临时文件存放在client_body_temp下，有三级子目录，每级子目录名长为2位
-  # 例如client_body_temp/88/46/64/1254654688
+  # 例如client_body_temp/88/46/65/1254654688
   client_body_temp_path client_body_temp 2 2 2;
   ```
 
