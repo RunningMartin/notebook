@@ -1449,9 +1449,73 @@ http {
 
 #### 实验
 
+- 安装步骤：
+
+```bash
+# 安装geoip
+➜  nginx-1.17.3 sudo add-apt-repository ppa:maxmind/ppa
+➜  nginx-1.17.3 sudo apt update
+➜  nginx-1.17.3 sudo apt-get install geoip-database-extra libgeoip1 libnginx-mod-http-geoip libgeoip-dev -y
+# 数据库位置
+➜  nginx-1.17.3 ls /usr/share/GeoIP
+GeoIPASNum.dat  GeoIPCity.dat  GeoIP.dat  GeoIPv6.dat
+
+# 编译
+➜  nginx-1.17.3 ./configure --prefix=/home/fangjie/Desktop/network_lib/nginx_lib/geoip --with-http_realip_module --with-http_geoip_module
+➜  nginx-1.17.3 make && make install
+➜  nginx-1.17.3 cd ../nginx_lib/geoip
+
+# 可以从如下地址，下载数据库
+➜  geoip wget https://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz
+➜  geoip wget https://geolite.maxmind.com/download/geoip/database/GeoLite2-Country.tar.gz
+➜  geoip tar -zxvf GeoLite2-City.tar.gz
+➜  geoip mv GeoLite2-City city
+➜  geoip tar -zxvf GeoLite2-Country.tar.gz
+➜  geoip mv GeoLite2-Country country
 ```
 
+- Nginx配置：
+
+```nginx
+worker_processes  1;
+events {
+    worker_connections  1024;
+}
+
+http {
+    include mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    keepalive_timeout  65;
+    geoip_country /usr/share/GeoIP/GeoIP.dat;
+    geoip_city /usr/share/GeoIP/GeoIPCity.dat;
+    geoip_proxy 127.0.0.1;
+    geoip_proxy_recursive on;
+
+	server {
+		listen 80;
+		server_name fangjie.site;
+		error_log logs/myerror.log notice;
+		root html/;
+        
+		location /{
+            return 200 'your info:
+            country_code:$geoip_country_code,
+            country_country:$geoip_country_name,
+            contient:$geoip_city_continent_code,
+            city:$geoip_city,
+            postal_code:$geoip_postal_code,
+            latitude:$geoip_latitude,
+            longitude:$geoip_longitude
+            ';
+        }
+	}
+}
 ```
+
+- 实验结果：
+
+![geoip实验结果](../raw/HTTP/geoip实验结果.png)
 
 ## 连接管理
 
@@ -1472,7 +1536,7 @@ Nginx也提供了3条指令控制连接复用：
 
 HTTP过滤模块是对响应内容进行加工，其作用于`CONTENT`和`LOG`阶段之间。
 
-![过滤模块的位置](../../../../../../usr/local/apps/Typora-linux-x64)
+![过滤模块的位置]()
 
 过滤时会先对header进行过滤，然后再对body进行过滤，具体的过滤模块执行顺序由`ngx_modules.c`中指定。过滤模块中有四个模块比较重要：
 
@@ -1528,7 +1592,7 @@ http {
 
 实验结果：
 
-![](../../../../../../usr/local/apps/Typora-linux-x64)
+![]()
 
 ### addition模块
 
