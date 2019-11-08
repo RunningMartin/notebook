@@ -69,7 +69,7 @@ location /a {
 
   ```nginx
   # 临时文件存放在client_body_temp下，有三级子目录，每级子目录名长为2位
-  # 例如client_body_temp/88/46/64/1254654688
+  # 例如client_body_temp/88/46/65/1254654688
   client_body_temp_path client_body_temp 2 2 2;
   ```
 
@@ -135,7 +135,6 @@ location /a {
 - `proxy_cookie_domain off|domain replacement`：修改`Set-Cookie`中的`domain`，默认值为`off`。
 - `proxy_cookie_path off|path replacement`：修改`Set-Cookie`中的`path`，默认值为`off`。
 - `proxy_redirect default|off|redirect replacement`：替换上游服务响应中的`Location`，默认值为`default`。
-- ` add_header filed value`：添加头部字段。
 
 ## 上游错误响应处理
 
