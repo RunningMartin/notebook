@@ -8,7 +8,7 @@ TCP连接是一个全双工连接，因此需要两端各自建立连接。`Cien
 
 - TCP建立连接的目的是
   - 分配资源
-  - 初始化包序列号(`ISN`)。
+  - 初始化包序列号(`ISN`)
 - 具体流程
   - 第一次握手：Client发送`SYN`包，告知Server，源端口和初始序列号，Client进入`SYN_SENT`状态。
   - 第二次握手：Server收到后，发送`SYN+ACK`包，告知Client初始序列号，Server进入`SYN_RECV`状态。
