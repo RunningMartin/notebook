@@ -61,7 +61,7 @@ TCP是一个可靠协议，每个发出的报文都需要对端发送`ACK`包，
 - `net.core.netdev_max_backlog`：调整网卡缓存中报文个数。
 - `net.ipv4.tcp_max_syn_backlog`：调整`SYN`队列中处于`SYN_RCVD`状态的TCP连接个数。
 - `net.ipv4.tcp_max_synack_retries`：`SYN/ACK`分组重发次数。
-- `net.ipv4.tcp_abort_on_overflow`：值为`1`时，如果超出处理能力，将对新的`SYN`分组回复`RST`分组，丢弃连接。
+- `net.ipv4.tcp_abort_on_overflow`：为`0`表示`ACCEPT`满后会丢弃客户端发送的`ACK`,服务端随后会重传`SYN/ACK`；为`1`表示`ACCEPT`满后，服务器回复`RST`分组，强制关闭连接。
 - `net.core.somaxconn`：调整`ACCEPT`队列中处于`ESTABLISHED`状态的连接个数。
 - `net.ipv4.tcp_syncookies `：值为`1`时，启用`SYN Cookie`算法。
 
