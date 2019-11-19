@@ -1,0 +1,1 @@
+- 杀多个进程：`ps -e -o pid,user,ppid,size,s,etime,args --sort pid --no-headers | grep 'PROCESS_NAME' | grep -v grep|awk '{print $1}'|xargs kill -9`。
