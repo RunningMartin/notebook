@@ -41,10 +41,10 @@ with make_server('', 8000, hello_world_app) as httpd:
 
 这里简单分析下整体的运行流程：
 
-![]()
+![wsgi实现运行流程]()
 
 ## 参考
 
 - PEP 3333：https://www.python.org/dev/peps/pep-3333
 
-- 标准wsgi实现：wsgiref
+- 标准wsgi实现：[wsgiref](https://docs.python.org/3/library/wsgiref.html)
