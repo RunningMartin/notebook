@@ -47,4 +47,4 @@ with make_server('', 8000, hello_world_app) as httpd:
 
 - PEP 3333：https://www.python.org/dev/peps/pep-3333
 
-- 标准wsgi实现：[wsgiref](https://docs.python.org/3/library/wsgiref.html)
+- wsgiref：https://docs.python.org/3/library/wsgiref.html
