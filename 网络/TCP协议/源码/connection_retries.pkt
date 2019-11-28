@@ -1,0 +1,4 @@
+// 创建socket
++0 socket(...,SOCK_STREAM,IPPROTO_TCP)=3
+// 客户端建立连接
++0 connect(3,...,...)=-1

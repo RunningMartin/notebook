@@ -1,0 +1,35 @@
+// 0秒时，执行socket系统调用 
+// #include <sys/socket.h>
+// int socket(int domain,int type,int protocol)
+// domain表示套接字使用的协议族信息，AF_INET 为ipv4，AF_INET6为ipv6
+// type表示socket类型，SOCK_STREAM为面向连接，SOCK_DGRAM为面向无连接
+// protocol表示协议类型，IPPROTO_TCP为tcp协议
+// ...表示忽略参数，packetdrill将采用默认配置
+// socket成功时将返回文件描述符，错误将返回-1
+//Linux程序中，每个程序打开时都会创建三个文件描述符 stdin(0)、stdout(1)、stderr(2)
+// 因此新建的文件描述符将从3开始，
+0 socket(...,SOCK_STREAM,IPPROTO_TCP) = 3
+// 设置端口参数为端口重用
++0 setsockopt(3,SOL_SOCKET,SO_REUSEADDR,[1],4) = 0
+// 绑定文件描述符和端口，默认8080
++0 bind(3,...,...) = 0
+// 监听端口
++0 listen(3,1) = 0
+
+//TCP 三次握手，注入语法类似tcpdump
+// > 表示预期协议栈发出的包
+// < 注入数据包到协议栈中
+// 注入一个SYN，起始seq、结束、包长度均为0 发送端窗口大小为4000，MSS值选项为1000
++0 < S 0:0(0) win 4000 <mss 1000> 
+// 预期协议栈立即返回SYN/ACK，因为没有数据，所有起始、结束、长度均为0，ack seq+1
++0 > S. 0:0(0) ack 1 <...>
+// 0.1秒后，注入ACK包，没有携带数据，所以数据长度为0
++0.1 < . 1:1(0) ack 1 win 1000
+
+// accept返回新的文件fd
++0 accept(3,...,...) = 4
+// 调用write往socket中写入10字节数据
++0 write(4,...,10) = 10
+// 
++0 > P. 1:11(10) ack 1
++0.1 < . 1:1(0) ack 11 win 1000
