@@ -20,14 +20,14 @@ HTTP协议的头部字段非常灵活并且可扩展，甚至你只需遵循报�
 常用的实体类型有：
 
 - text：文本格式数据，如`text/html`、`text/css`。
-- image：图像文件，如`image/jpeg`、`image、gif`。
+- image：图像文件，如`image/jpeg`、`image/gif`。
 - `audio`：音频数据。
 - `video`：视频数据。
 - `application`：该数据需要上层应用解释，如`application/pdf`。
 
 ## 0X02 Content-Encoding：压缩格式
 
-`Content-EncodingHTTP`字段用于标识body的压缩格式，通过压缩数据，可以节约带宽。通常只对未压缩(文本)的内容压缩，若对已压缩文件(图片、视频)再次压缩可能会使体积增加。
+`Content-Encoding`字段用于标识body的压缩格式，通过压缩数据，可以节约带宽。通常只对未压缩(文本)的内容压缩，若对已压缩文件(图片、视频)再次压缩可能会使体积增加。
 
 常用的压缩格式为：
 
