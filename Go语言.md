@@ -184,3 +184,93 @@ func main(){
 
 ## 变量
 
+### 变量声明
+
+变量是运行时刻存储在内存中并且可以被更改的有名字的值。每一个变量都是类型确定的值，因此声明变量时必须提供足够多的信息，以便于编译器推断出变量的类型。
+
+变量有两种声明方式
+
+- 标准声明：标准声明的格式为`var 变量名 类型 = 初始化值`，并且在一条声明语句中，可以声明多个同类型变量。
+
+  ```go
+  package main
+  
+  import (
+      "fmt"
+      "reflect"
+  )
+  
+  func main() {
+      //var website string = "https://golang.site"
+  	//var compiled, dynamic bool = true, false
+      // 省略变量类型，编译器更佳初始值推断变量类型
+      var website, dynamic = "https://golang.site", false
+      // website的初始类型为string
+      // dynamic的初始类型为false
+      fmt.Println(website," type:", reflect.TypeOf(website))
+  	fmt.Println(dynamic," type:", reflect.TypeOf(dynamic))
+      
+      // 忽略初始值，编译器将初始值设置为零值
+      var compiled bool
+      fmt.Println("compiled"," init value:", compiled)
+  	// 声明多个变量
+  	var(
+  	lang, bornYear = "GO",2007
+  	)
+      fmt.Println(lang,bornYear)
+  }
+  ```
+
+- 短声明：短声明只能用于声明局部变量，短声明的语法为`变量名 := 变量值`。
+
+  ```go
+  package main
+  
+  import (
+      "fmt"
+      "reflect"
+  )
+  
+  func main() {
+      lang, bornYear := "Go", 2007
+      fmt.Println("lang",lang,"type", reflect.TypeOf(lang))
+  	fmt.Println("bornYear:",bornYear,"type", reflect.TypeOf(bornYear))
+  }
+  ```
+
+- 赋值语句：一个变量声明后，可以通过`表达式 = 值`进行赋值。表达式必须为一个可寻址的值、映射元素或一个空标识符`_`。常量是不可改变的，因此不能作为表达式。
+
+## 作用域
+
+变量或常量的作用域决定了该标识符的可见范围，常见的作用域有：
+
+- 全局变量、全局常量：作用域为整个代码包。
+- 局部变量、局部常量：作用域开始于定义位置，接受于所在代码块的结尾。
+
+## 运算操作符
+
+
+
+## 扩展
+
+- 获取数据类型：`reflect.TypeOf(x)`需要导入`reflect`。
+
+  ```go
+  package main
+  
+  import (
+      "fmt"
+      "reflect"
+  )
+  
+  func main() {
+      //var website string = 'https://golang.site'
+  	//var compiled, dynamic bool = true, false
+      // 省略变量类型，编译器更佳初始值推断变量类型
+      var website, dynamic = 'https://golang.site', false
+      // website的初始类型为string
+      // dynamic的初始类型为false
+      fmt.Println(website," type:", reflect.TypeOf(website))
+  	fmt.Println(dynamic," type:", reflect.TypeOf(dynamic))
+  }
+  ```
