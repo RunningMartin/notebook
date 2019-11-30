@@ -165,7 +165,7 @@ const (
 `Go`中预声明了一个特殊的有名常量`iota`，它的值预声明为`0`。在编译过程中，如果`iota`出现在常量声明中，它的值表示第`n`个常量描述符(从`0`开始)。
 
 ```go
-package main()
+package main
 
 func main(){
     const (
@@ -174,6 +174,11 @@ func main(){
         n						// n=2.5,iota=2
     )
     const x=iota				//x=0 iota=0
+
+	println("k:",k)
+	println("m:",m)
+	println("n:",n)
+	println("x:",x)
 }
 ```
 
