@@ -50,3 +50,9 @@
 ➜  Desktop go get golang.org/x/tour
 ```
 
+2、`Golang`运行单个程序，出现`go run: cannot run non-main package`。
+
+- 分析：使用一个文件单独运行的程序必须放在`package main`下面。
+
+
+
