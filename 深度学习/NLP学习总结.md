@@ -84,3 +84,46 @@ $$
 
 - [神经网络中w,b参数的作用](https://blog.csdn.net/xwd18280820053/article/details/70681750)
 - [神经网络在线课](https://posts.careerengine.us/p/5afbd565e0524d5d843b98f7)
+
+## 梯度下降和反向传播
+
+### 梯度下降
+
+神经网络更新权重和偏置时，需要一个方法来衡量当前选择的权重和偏置是否合理，这种方法被称作为损失函数。常见的损失函数是二次代价函数(MSE)：
+$$
+C(w,b)=\frac{1}{2n}\sum_x||y(x)-a||^2,y(x)是预期值，a为实际值
+$$
+损失函数的值越小，当前的(w,b)越合理，因此整个问题转换为求损失函数的最小值。微积分中求函数的最小值通常采用求极值点，然后讨论极值的方法获取。
+
+由于二次代价函数属于多元微积分，因此我们采用求梯度，然后让变量沿梯度方向变化，逼近极值点。梯度是多元导数中的概念，它是一个矢量，多元可微函数`f`在点`P`的梯度是函数`f`在`P`点的偏导数为分量的向量，梯度的方向是函数`f`在`P`点最大的增长方向，梯度的标量则表示增长率。
+$$
+\nabla C=(\frac{\partial C}{\partial w},\frac{\partial C}{\partial b})^T ，\nabla C表示梯度\\
+w_k \rightarrow w_k'=w_k - \eta\frac{\partial C}{\partial w_k}\\
+b_k \rightarrow b_k'=b_k - \eta\frac{\partial C}{\partial b_k}
+$$
+$\eta$ 表示学习率，用于控制每次迭代的间隙，间隙过小会导致迭代次数过多；间隙过大则可能出现局部最小值无法收敛。
+
+通常情况下，数据量都很大，如果等全部数据都计算后，再更新(w,b)，则会带来大量的时间损耗，因此可以采用随机梯度下降。
+$$
+w_k \rightarrow w_k'=w_k - \frac{\eta}{m}\frac{\partial C}{\partial w_k}，m代表数据集大小\\
+b_k \rightarrow b_k'=b_k - \frac{\eta}{m}\frac{\partial C}{\partial b_k}
+$$
+
+### 反向传播
+
+![神经元按层分布](NLP学习/神经元按层分布.png)
+
+在复杂的神经网络中，很难通过损失函数显式推导出权重和偏置，因此需要采用反向传播，求相应的梯度。
+$$
+W^l_{jk}：第l-1层第k个神经元到l层第j个神经元的权重 \\
+b_j^l：第l层第j个神经元的偏置\\
+a_j^l=\sigma(\sum_kw^l{jk}a^{l-1}_k+b^l_j)：第l层第j个神经元的输出\\
+a^l=\sigma(w^la^{l-1}+b^l)：第l层的输出\\
+z^l_j=\sum_kw^l{jk}a^{l-1}_k+b^l_j：第l层第j个神经元的带权输入\\
+z^l_j=w^la^{l-1}+b^l：第l层的带权输入
+$$
+
+
+### 参考
+
+- [梯度]([https://zh.wikipedia.org/wiki/%E6%A2%AF%E5%BA%A6](https://zh.wikipedia.org/wiki/梯度))
