@@ -502,8 +502,15 @@ Out[7]:
 
 ```python
 In[9]: array = np.array([[[1,2,3],[4,5,6]],[[7,8,9],[10,11,12]]])
-In[10]: np.dsplit(array,[1])
+In[10]: array
 Out[10]: 
+array([[[ 1,  2,  3],
+        [ 4,  5,  6]],
+
+       [[ 7,  8,  9],
+        [10, 11, 12]]])
+In[11]: np.dsplit(array,[1])
+Out[11]: 
 [array([[[ 1],
          [ 4]],
  
@@ -515,4 +522,462 @@ Out[10]:
         [[ 8,  9],
          [11, 12]]])]
 ```
+
+## 通用函数
+
+### 基础
+
+`Python`由于语言的动态性，其循环操作是非常慢的。每次循环时都会做数据类型的检查，并且动态查找该类型对应的函数，因此要提高运行速度，需要在代码执行前知道类型的声明。
+
+```python
+In[2]: import numpy as np
+In[3]: np.random.seed(0)
+In[4]: def compute_reciprocals(values):
+  ...:     output = np.empty(len(values))
+  ...:     for i in range(len(values)):
+  ...:         output[i] = 1.0 / values[i]
+  ...:     return output
+  ...: 
+In[5]: values = np.random.randint(1, 100, size=1000000)
+In[6]: %timeit compute_reciprocals(values)
+1.71 s ± 9.34 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+```
+
+`NumPy`提供通用函数则可以优化数据数组的计算，它的核心是利用了向量化操作。
+
+```python
+In[7]: %timeit (1 /values)
+4.06 ms ± 21.2 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
+```
+
+通用函数的主要目的是对数组中的值执行快速重复操作，支持标量和数组的运算、数组和数组间的运算。
+
+```python
+In[8]: array = np.arange(1,10).reshape((3,3))
+In[9]: array*2
+Out[9]: 
+array([[ 2,  4,  6],
+       [ 8, 10, 12],
+       [14, 16, 18]])
+In[10]: array+array
+Out[10]: 
+array([[ 2,  4,  6],
+       [ 8, 10, 12],
+       [14, 16, 18]])
+```
+
+### 常用通用函数
+
+通用函数有两种存在形式：一元通用函数和二元通用函数。
+
+- 算术运算
+
+| 运算符 | 对应的通用函数    | 描述                                           |
+| ------ | ----------------- | ---------------------------------------------- |
+| +      | `np.add`          | 加法运算（即 1 + 1 = 2）                       |
+| -      | `np.subtract`     | 减法运算（即 3 - 2 = 1）                       |
+| -      | `np.negative`     | 负数运算（ 即 -2）                             |
+| *      | `np.multiply`     | 乘法运算（即 2 \* 3 = 6）                      |
+| /      | `np.divide`       | 除法运算（即 3 / 2 = 1.5）                     |
+| //     | `np.floor_divide` | 向下整除运算（floor division， 即 3 // 2 = 1） |
+| **     | `np.power`        | 指数运算（即 2 ** 3 = 8）                      |
+| %      | `np.mod`          | 模运算（ 即 9 % 4 = 1）                        |
+
+- 绝对值：`np.absolute(array)`或者`np.abs(array)`，绝对值函数处理复数时，返回该复数的幅度。
+
+```python
+In[2]: import numpy as np
+In[3]: x=np.array([3 - 4j, 4 - 3j, 2 + 0j, 0 + 1j])
+In[4]: np.abs(x)
+Out[4]: array([5., 5., 2., 1.])
+```
+
+- 三角函数
+
+| 通用函数    | 描述       |
+| ----------- | ---------- |
+| `np.sin`    | 正弦函数   |
+| `np.cos`    | 余弦函数   |
+| `np.tan`    | 正切函数   |
+| `np.arcsin` | 反正弦函数 |
+| `np.arccos` | 反余弦函数 |
+| `np.arctan` | 反正切函数 |
+
+- 指数
+
+| 通用函数        | 描述                                    |
+| --------------- | --------------------------------------- |
+| `np.exp(x)`     | e的x次方                                |
+| `np.exp2(x)`    | 2的x次方                                |
+| `np.power(a,b)` | a的b次方                                |
+| `np.expm1(x)`   | exp(x)-1，适用于x很小时，精读高于np.exp |
+
+- 对数运算
+| 通用函数      | 描述                                    |
+| ------------- | --------------------------------------- |
+| `np.log(x)`   | ln(x)                                   |
+| `np.log2(x)`  | log2(x)                                 |
+| `np.log10(x)` | log10(x)                                |
+| `np.log1p(x)` | log(1+x)，适用于x很小时，精读高于np.log |
+- 专用函数：子模块`scipy.special  `和`NumPy`提供了很多统计学或其他专业的专用函数。
+
+### 高级特性
+
+- 指定输出：可以通过`out`属性，指定运算结果保留位置，节约内存。
+
+```python
+In[2]: import numpy as np
+In[3]: x=np.arange(5)
+In[4]: y=np.empty(5)
+In[5]: np.multiply(x,10,out=y)
+Out[5]: array([ 0., 10., 20., 30., 40.])
+In[6]: y
+Out[6]: array([ 0., 10., 20., 30., 40.])
+In[7]: y=np.zeros(10)
+# 可以接受切片
+In[8]: np.power(2,x,out=y[::2])
+Out[8]: array([ 1.,  2.,  4.,  8., 16.])
+In[9]: y
+Out[9]: array([ 1.,  0.,  2.,  0.,  4.,  0.,  8.,  0., 16.,  0.])
+```
+
+- 外积：通用函数都有一个`outer`方法，用于获取两个输入数组的所有元素对的运算结果。
+
+```python
+In[10]: x = np.arange(1, 6)
+In[11]: x
+Out[11]: array([1, 2, 3, 4, 5])
+# 参数类似与笛卡尔积
+In[12]: np.multiply.outer(x, x)
+Out[12]: 
+array([[ 1,  2,  3,  4,  5],
+       [ 2,  4,  6,  8, 10],
+       [ 3,  6,  9, 12, 15],
+       [ 4,  8, 12, 16, 20],
+       [ 5, 10, 15, 20, 25]])
+```
+
+- 聚合：通用函数都有一个`reduce`方法，将输入的数组中所有元素重复执行操作，直到获得单个结果。如果想要存储每次计算的中间结果，可以使用`accumulate`。
+
+```python
+In[13]: np.add.reduce(x)
+Out[13]: 15
+In[14]: np.multiply.reduce(x)
+Out[14]: 120
+In[15]: np.multiply.accumulate(x)
+Out[15]: array([  1,   2,   6,  24, 120], dtype=int32)
+```
+
+### 更多函数
+
+- http://www.numpy.org
+- http://www.scipy.org
+
+## 聚合
+
+聚合操作常用于获取数据的一些信息，如中位数、平均值、最值等。
+
+- 求和：`np.sum(array)`，对应快捷方式`array.sum()`。
+- 最值：`np.min`、`np.max`，对应快捷方式是`array.min()`、`array.max()`。
+
+- 聚合函数支持用`axis`指定聚合方向。`axis`指定数组将被折叠的维度，如`axis=0`，则第一个轴将被折叠。
+
+```python
+In[2]: import numpy as np
+In[3]: a=np.array([[1,2,3],[4,5,6]])
+In[4]: a
+Out[4]: 
+array([[1, 2, 3],
+       [4, 5, 6]])
+# 行被折叠，每一列都会被聚合
+In[5]: a.sum(axis=0)
+Out[5]: array([5, 7, 9])
+# 列被折叠，每一行都会被聚合
+In[6]: a.sum(axis=1)
+Out[6]: array([ 6, 15])
+In[7]: a=np.array([[[1],[2],[3]],[[4],[5],[6]]])
+In[8]: a.sum(axis=2)
+Out[8]: 
+array([[1, 2, 3],
+       [4, 5, 6]])
+```
+
+- 其他聚合函数
+
+| 函数名称      | NaN安全版本      | 描述                     |
+| ------------- | ---------------- | ------------------------ |
+| np.sum        | np.nansum        | 计算元素的和             |
+| np.prod       | np.nanprod       | 计算元素的积             |
+| np.mean       | np.nanmean       | 计算元素的平均值         |
+| np.std        | np.nanstd        | 计算元素的标准差         |
+| np.var        | np.nanvar        | 计算元素的方差           |
+| np.min        | np.nanmin        | 找出最小值               |
+| np.max        | np.nanmax        | 找出最大值               |
+| np.argmin     | np.nanargmin     | 找出最小值的索引         |
+| np.argmax     | np.nanargmax     | 找出最大值的索引         |
+| np.median     | np.nanmedian     | 计算元素的中位数         |
+| np.percentile | np.nanpercentile | 计算基于元素排序的统计值 |
+| np.any        | N/A              | 验证任何一个元素是否为真 |
+| np.all        | N/A              | 验证所有元素是否为真     |
+
+## 广播
+
+### 基础
+
+广播机制也是一种向量化操作，用于提高运行效率。针对相同大小的数组，二进制操作(加、减、乘、除等)是对应元素逐个计算，广播机制允许二进制操作作用于两个不同大小的数组。
+
+```
+In[2]: import numpy as np
+In[3]: a= np.array([0,1,2])
+In[4]: b = np.array([5,5,5])
+# 二进制操作
+In[5]: a+b
+Out[5]: array([5, 6, 7])
+# 广播机制，5被扩展为[5,5,5] (实际没发生，只是便于理解)
+In[6]: a+5
+Out[6]: array([5, 6, 7])
+# 一维数组a被扩展为二维 [[1,2,3],[1,2,3],[1,2,3]]
+In[7]: b = np.ones((3, 3))
+In[8]: a+b
+Out[8]: 
+array([[1., 2., 3.],
+       [1., 2., 3.],
+       [1., 2., 3.]])
+# 三维
+In[9]: b = np.arange(3)[:, np.newaxis]
+In[10]: a = np.arange(3)
+In[11]: a
+Out[11]: array([0, 1, 2])
+In[12]: b
+Out[12]: 
+array([[0],
+       [1],
+       [2]])
+In[13]: a+b
+Out[13]: 
+array([[0, 1, 2],
+       [1, 2, 3],
+       [2, 3, 4]])
+```
+
+![广播机制](广播机制.png)
+
+### 广播规则
+
+- 如果两个数组的维度数不相同， 那么小维度数组的形状将会在最左边补1。
+- 如果两个数组的形状在任何一个维度上都不匹配，那么数组的形状会沿着维度为1的维度扩展以匹配另外一个数组的形状。
+- 如果两个数组的形状在任何一个维度上都不匹配并且没有任何一个维度等于1，那么会引发异常。  
+
+### 使用常见
+
+- 归一化：将数据映射到[0-1]之间。
+
+```python
+In[2]: import numpy as np
+In[3]: array = np.random.random((10,3))
+In[4]: mean = array.mean()
+In[5]: array_centered = array-mean
+In[6]: array_centered.mean(0)
+Out[6]: array([-0.01082438, -0.066441  ,  0.07726538])
+```
+
+## 布尔掩码
+
+布尔掩码常用于基于某些准则来抽取、修改或根据阈值筛选值。
+
+示例：统计下雨天数，[数据集](https://github.com/jakevdp/PythonDataScienceHandbook/blob/master/notebooks/data/Seattle2014.csv)。
+
+传统的方法是对数据集循环，设置计数器，当数据落在区间内，则计数器+1。当时循环是一种比较低效的方法。
+
+### 比较运算符
+
+`NumPy`支持6种标准的比较运算符。
+
+| 运算符 | 对应的通用函数     |
+| ------ | ------------------ |
+| ==     | `np.equal`         |
+| !=     | `np.not_equal`     |
+| <      | `np.less`          |
+| <=     | `np.less_equal`    |
+| >      | `np.greater`       |
+| >=     | `np.greater_equal` |
+
+比较运算符将返回一个数据元素为布尔类型的数组。
+
+```python
+In[2]: import numpy as np
+In[3]: np.array([1,2,3,4,5])
+Out[3]: array([1, 2, 3, 4, 5])
+In[4]: array = np.array([1,2,3,4,5])
+In[5]: array %2 ==0
+Out[5]: array([False,  True, False,  True, False])
+```
+
+### 聚合运算
+
+- 统计个数：布尔数组可以通过`np.count_nonzero`函数和`np.sum`来统计`True`元素的个数，`sum`中`True`被解释为`1`。`sum`支持选轴统计。
+
+```python
+In[2]: import numpy as np 
+In[3]: x = np.random.randint(0,10,(3,4))
+In[4]: x
+Out[4]: 
+array([[3, 9, 5, 4],
+       [7, 3, 9, 4],
+       [6, 7, 1, 1]])
+In[5]: np.count_nonzero(x<6)
+Out[5]: 7
+In[6]: np.sum(x<6)
+Out[6]: 7
+# 统计每列小于6的元素个数
+In[7]: np.sum(x<6,axis=0)
+Out[7]: array([1, 1, 2, 3])
+```
+
+- 快速判断数据：`np.any`和`np.all`可以判断数组中元素是否为全是`True`。
+
+```python
+In[14]: np.all(x<8,axis=1)
+Out[14]: array([False, False,  True])
+```
+
+- 位运算符：`NumPy`支持`&`、`|`、`^`(按位异或)、`~`(按位取反)。
+
+```python
+In[15]: np.sum((x>3)& (x<5),axis=1)
+Out[15]: array([1, 1, 0])
+```
+
+| 运算符 | 对应通用函数   |
+| ------ | -------------- |
+| &      | `np.bitwise_and` |
+| \|   | `np.bitwise_or` |
+| ^    | `np.bitwise_xor` |
+| ~    | `np.bitwise_not` |
+
+### 掩码操作
+
+布尔操作返回的是一个布尔数组。`NumPy`支持掩码操作，返回符合条件的值。
+
+```python
+In[16]: x[x<5]
+Out[16]: array([3, 4, 3, 4, 1, 1])
+```
+
+## 索引
+
+`NumPy`数组支持四种方法来获取数组中的元素或子数组：
+
+- 索引值
+- 切片
+- 布尔掩码
+- 索引数组
+
+### 索引数组基础
+
+```python
+In[2]: import numpy as np
+In[3]: x = np.random.randint(0,10,20)
+In[4]: x
+Out[4]: array([5, 2, 5, 9, 3, 4, 3, 8, 9, 1, 9, 4, 2, 9, 4, 9, 5, 0, 9, 2])
+In[5]: x[[3,4,7]]
+Out[5]: array([9, 3, 8])
+# 结果的形状同索引数组的形状
+In[6]: b= np.array([[3,4],[9,10]])
+In[7]: x[b]
+Out[7]: 
+array([[9, 3],
+       [1, 9]])
+```
+
+索引数组还支持对多个维度，第一个索引为行，第二个索引为列。
+
+```python
+In[8]: x = np.arange(12).reshape((3, 4))
+In[9]: x
+Out[9]: 
+array([[ 0,  1,  2,  3],
+       [ 4,  5,  6,  7],
+       [ 8,  9, 10, 11]])
+In[10]: row=np.array([0,1,2])
+In[11]: col=np.array([2,1,3])
+# 索引值将一一配对 (0,2)、(1,2)、(2,3)
+In[12]: x[row,col]
+Out[12]: array([ 2,  5, 11])
+```
+
+索引值配对时遵循广播的规则。
+
+```python
+# row[:,np.newaxis] ==> [[0],[1],[2]] shape (3,1) ==> (3,3)
+# col [2,1,3]  shape (1,3) ==> (3,3)
+In[14]: x[row[:,np.newaxis],col]
+Out[14]: 
+array([[ 2,  1,  3],
+       [ 6,  5,  7],
+       [10,  9, 11]])
+```
+
+### 组合索引
+
+索引数组可以和其他索引方案搭配，形成更强大的索引操作。
+
+```python
+In[15]: x= np.arange(0,12).reshape((3,4))
+In[16]: x
+Out[16]: 
+array([[ 0,  1,  2,  3],
+       [ 4,  5,  6,  7],
+       [ 8,  9, 10, 11]])
+# 广播
+In[17]: x[2,[2,0,1]]
+Out[17]: array([10,  8,  9])
+# 广播
+In[18]: x[1:,[2,0,1]]
+Out[18]: 
+array([[ 6,  4,  5],
+       [10,  8,  9]])
+```
+
+### 示例
+
+采用`jupyter-notebook`。
+
+- 选择随机点：快速分割数据， 即需要分割训练 / 测试数据集以验证
+  统计模型。
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn;seaborn.set()
+mean = [0, 0]
+cov = [[1, 2],
+       [2, 5]]
+# 多元正态
+x = np.random.multivariate_normal(mean, cov, 100)
+%matplotlib inline
+plt.scatter(x[:, 0], x[:, 1]);
+```
+
+![100个随机点](100个随机点.png)
+
+随机选取20个点。
+
+```python
+indices = np.random.choice(X.shape[0], 20, replace=False)
+selection = x[indices]
+plt.scatter(x[:, 0], x[:, 1], alpha=0.3)
+plt.scatter(selection[:, 0], selection[:, 1],
+facecolor='none', edgecolor='b', s=200);
+```
+
+![随机选择20个](随机选择20个.png)
+
+- 通过索引修改值
+
+## 排序
+
+
+
+## 结构化数据
 
