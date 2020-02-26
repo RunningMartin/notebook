@@ -943,8 +943,7 @@ array([[ 6,  4,  5],
 
 采用`jupyter-notebook`。
 
-- 选择随机点：快速分割数据， 即需要分割训练 / 测试数据集以验证
-  统计模型。
+- 选择随机点：快速分割数据，即需要分割训练/测试数据集以验证统计模型。
 
 ```python
 import numpy as np
@@ -953,8 +952,11 @@ import seaborn;seaborn.set()
 mean = [0, 0]
 cov = [[1, 2],
        [2, 5]]
-# 多元正态
-x = np.random.multivariate_normal(mean, cov, 100)
+# 多元正态 mean为对应维度分布的均值，维度为1
+# cov:协方差矩阵,协方差矩阵必须是对称的且需为半正定矩阵
+# https://blog.csdn.net/zch1990s/article/details/80001991
+# size=生成的正态分布矩阵的维数 100==> shape (100,len(mean))
+x = np.random.multivariate_normal(mean, cov, size=100)
 %matplotlib inline
 plt.scatter(x[:, 0], x[:, 1]);
 ```
@@ -965,7 +967,9 @@ plt.scatter(x[:, 0], x[:, 1]);
 
 ```python
 indices = np.random.choice(X.shape[0], 20, replace=False)
+# 索引数组选取值
 selection = x[indices]
+# 点颜色变浅
 plt.scatter(x[:, 0], x[:, 1], alpha=0.3)
 plt.scatter(selection[:, 0], selection[:, 1],
 facecolor='none', edgecolor='b', s=200);
@@ -973,7 +977,67 @@ facecolor='none', edgecolor='b', s=200);
 
 ![随机选择20个](随机选择20个.png)
 
-- 通过索引修改值
+- 通过索引修改值：通过索引数组获取的数组是原数组的非副本。
+
+```python
+In[2]: import numpy as np
+In[3]: x=np.arange(10)
+In[4]: i=np.array([2,1,8,4])
+In[5]: x[i]
+Out[5]: array([2, 1, 8, 4])
+In[6]: x[i]-=10
+In[7]: x
+Out[7]: array([ 0, -9, -8,  3, -6,  5,  6,  7, -2,  9])
+# 重复索引值获取最后一次的值
+In[8]: x[[0,0]]=[4,6]
+In[9]: x
+Out[9]: array([ 6, -9, -8,  3, -6,  5,  6,  7, -2,  9])
+In[10]: x=np.zeros(10)
+# 重复索引不会发生累加
+# x[i]=x[i]+1
+# x[1]=x[1]+1 x[1]=x[1]+1 x[1]=x[1]+1 x[1]是第一次取出的值
+In[11]: x[[1,1,1,2,2]]+=1 
+In[12]: x
+Out[12]: array([0., 1., 1., 0., 0., 0., 0., 0., 0., 0.])
+```
+
+如果要实现累加，可以使用通用函数的`at`方法。
+
+```python
+In[13]: x=np.zeros(10)
+In[14]: np.add.at(x,[1,1,1,2,2],1)
+In[15]: x
+Out[15]: array([0., 3., 2., 0., 0., 0., 0., 0., 0., 0.])
+```
+
+- 数据区间划分：划分区间并创建直方图。
+
+```
+import numpy as np
+import matplotlib.pyplot as plt
+np.random.seed(42)
+# 生成100个数据
+x = np.random.randn(100)
+# -5到5之间20等分
+bins = np.linspace(-5, 5, 20)
+# 手动画直方图
+counts = np.zeros_like(bins)
+# 计算每个x所在bins中的序号
+i = np.searchsorted(bins, x)
+# 统计区间个数
+np.add.at(counts, i, 1)
+# 等价于counts, edges = np.histogram(x, bins) 适用于大数据
+# np.add.at(counts, np.searchsorted(bins, x), 1)
+# 画图
+plt.plot(bins, counts, linestyle='steps');
+
+# 快捷画图
+%matplotlib inline
+# 画直方图
+plt.hist(x, bins, histtype='step');
+```
+
+![区间划分](区间划分.png)
 
 ## 排序
 
