@@ -726,7 +726,7 @@ array([[1, 2, 3],
 
 广播机制也是一种向量化操作，用于提高运行效率。针对相同大小的数组，二进制操作(加、减、乘、除等)是对应元素逐个计算，广播机制允许二进制操作作用于两个不同大小的数组。
 
-```
+```python
 In[2]: import numpy as np
 In[3]: a= np.array([0,1,2])
 In[4]: b = np.array([5,5,5])
@@ -1012,7 +1012,7 @@ Out[15]: array([0., 3., 2., 0., 0., 0., 0., 0., 0., 0.])
 
 - 数据区间划分：划分区间并创建直方图。
 
-```
+```python
 import numpy as np
 import matplotlib.pyplot as plt
 np.random.seed(42)
@@ -1041,7 +1041,100 @@ plt.hist(x, bins, histtype='step');
 
 ## 排序
 
+### 基础
 
+- 快速排序`np.sotr`和`np.argsort`。
+
+```
+In[2]: import numpy as np
+In[3]: array = np.array([2, 1, 4, 3, 5])
+# 非原地排序
+In[4]: np.sort(array)
+Out[4]: array([1, 2, 3, 4, 5])
+In[5]: array.sort()
+# 原地排序
+In[6]: array
+Out[6]: array([1, 2, 3, 4, 5])
+# argsort 将返回原始数组排好序后的索引值
+In[7]: array = np.array([2, 1, 4, 3, 5])
+In[8]: i = np.argsort(array)
+In[9]: i
+Out[9]: array([1, 0, 3, 2, 4], dtype=int64)
+# 通过索引数组可以获取
+In[10]: array[i]
+Out[10]: array([1, 2, 3, 4, 5])
+# sort函数还接受axis参数，指定按行还是按列排序，只是原有行或列之间的关系将丢失。
+In[11]: rand = np.random.RandomState(42)
+In[12]: x = rand.randint(0, 10, (4, 6))
+In[13]: x
+Out[13]: 
+array([[6, 3, 7, 4, 6, 9],
+       [2, 6, 7, 4, 3, 7],
+       [7, 2, 5, 4, 1, 7],
+       [5, 1, 4, 0, 9, 5]])
+In[14]: np.sort(x, axis=0)
+Out[14]: 
+array([[2, 1, 4, 0, 1, 5],
+       [5, 2, 5, 4, 3, 7],
+       [6, 3, 7, 4, 6, 7],
+       [7, 6, 7, 4, 9, 9]])
+In[15]: np.sort(x, axis=1)
+Out[15]: 
+array([[3, 4, 6, 6, 7, 9],
+       [2, 3, 4, 6, 7, 7],
+       [1, 2, 4, 5, 7, 7],
+       [0, 1, 4, 5, 5, 9]])
+```
+
+- 分割排序：`np.partition`和`np.argpartition`提供对数组进行分区，函数的输入是数组和数字K，输出结果是一个新数组，数组下标K的位置是分界线，表示第`K+1`小的元素，左边是更小的元素，右边是更大的元素。
+
+```python
+In[2]: import numpy as np
+In[3]: x = np.array([7, 2, 3, 1, 6, 5, 4,9,8,0])
+In[4]: np.partition(x,3)[3]
+Out[4]: 3
+In[5]: np.partition(x,3)
+Out[5]: array([0, 1, 2, 3, 4, 5, 6, 9, 8, 7])
+In[6]: np.partition(x,7)[7]
+Out[6]: 7
+In[7]: np.partition(x,7)
+Out[7]: array([4, 0, 3, 1, 2, 5, 6, 7, 8, 9])
+```
+
+### 示例
+
+`K`个最近邻：使用`argsort`函数沿着多个轴快速找到集合中每个点的最近邻，实现方案时间复杂度为`O(N^2)`，最佳方案
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn
+seaborn.set()
+# 设置随机数
+rand = np.random.RandomState(42)
+# 生成10个点
+x= rand.rand(10,2)
+# 生成预览图
+%matplotlib inline
+plt.scatter(x[:,0],x[:,1],s=100)
+```
+
+![K个最近邻初始数据图](K个最近邻初始数据图.png)
+
+```python
+# 求点与点之间距离的平方==对应坐标差的平方
+dist = np.sum((x[:,np.newaxis,:]-x[np.newaxis,:,:])**2,axis=2)
+# dist.diagonal() 对角线是全零
+# 计算最近的两个点
+nearst_partition = np.argpartition(dist,3,axis=1)[:,1:3]
+# 画图，将最近的两个点链接
+plt.scatter(x[:, 0], x[:, 1], s=100)
+for i in range(x.shape[0]):
+    for j in nearst_partition[i]:
+        plt.plot(*zip(x[j],x[i]),color='black')
+```
+
+![K个最近邻](K个最近邻.png)
 
 ## 结构化数据
 
