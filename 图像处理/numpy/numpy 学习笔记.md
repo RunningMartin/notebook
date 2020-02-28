@@ -1138,3 +1138,117 @@ for i in range(x.shape[0]):
 
 ## 结构化数据
 
+### 基础
+
+结构化数组中存储的元素的复合数据类型，用于存储一些有关联的数据。
+
+```python
+# 四个人的身高，体重，
+name = ['Alice', 'Bob', 'Cathy', 'Doug']
+age = [25, 45, 37, 19]
+weight = [55.0, 85.5, 68.0, 61.5]
+```
+
+`NumPy`中，`dtype`可以指定复合数据类型。
+
+```python
+In[2]: import numpy as np
+# names指定属性，formats指定相应的数据个数
+# U10表示长度不超过10的Unicode字符串
+# i4 4个字节的整型
+# f8 8个字节的浮点型
+In[3]: data = np.zeros(4,dtype={'names':('name','age','weight'),"formats":('U10',"i4",'f8')})
+In[4]: data
+Out[4]: 
+array([('', 0, 0.), ('', 0, 0.), ('', 0, 0.), ('', 0, 0.)],
+      dtype=[('name', '<U10'), ('age', '<i4'), ('weight', '<f8')])
+In[5]: name = ['Alice', 'Bob', 'Cathy', 'Doug']
+In[6]: age = [25, 45, 37, 19]
+In[7]: weight = [55.0, 85.5, 68.0, 61.5]
+# 存入数据
+In[8]: data['name']=name
+In[9]: data['age']=age
+In[10]: data['weight']=weight
+In[11]: data
+Out[11]: 
+array([('Alice', 25, 55. ), ('Bob', 45, 85.5), ('Cathy', 37, 68. ),
+       ('Doug', 19, 61.5)],
+      dtype=[('name', '<U10'), ('age', '<i4'), ('weight', '<f8')])
+# 可以按索引获取数据
+In[12]: data[0]
+Out[12]: ('Alice', 25, 55.)
+In[13]: data[1]
+Out[13]: ('Bob', 45, 85.5)
+```
+
+### 复合数据结构
+
+`NumPy`支持如下几种方式来指定结构化数据的数据类型：
+
+- 字典
+
+```python
+In[2]: import numpy as np
+In[3]: np.dtype({'names':('name', 'age', 'weight'),'formats':('U10', 'i4', 'f8')})
+# < 表示低字节序 
+# > 表示高字节序
+Out[3]: dtype([('name', '<U10'), ('age', '<i4'), ('weight', '<f8')])
+```
+
+- 元组
+
+```python
+In[4]: np.dtype([('name', 'S10'), ('age', 'i4'), ('weight', 'f8')])
+Out[4]: dtype([('name', 'S10'), ('age', '<i4'), ('weight', '<f8')])
+```
+
+- 不需要属性名，可直接使用字符串指定类型。
+
+```python
+In[5]: np.dtype('S10,i4,f8')
+Out[5]: dtype([('f0', 'S10'), ('f1', '<i4'), ('f2', '<f8')])
+```
+
+`NumPy`支持的数据类型描述符有：
+
+| NumPy数据类型符 号 | 描述                             | 示例                             |
+| ------------------ | -------------------------------- | -------------------------------- |
+| 'b'                | 字节型                           | np.dtype('b')                    |
+| 'i'                | 有符号整型                       | np.dtype('i4') == np.int32       |
+| 'u'                | 无符号整型                       | np.dtype('u1') == np.uint8       |
+| 'f'                | 浮点型                           | np.dtype('f8') == np.int64       |
+| 'c'                | 复数浮点型                       | np.dtype('c16') == np.complex128 |
+| 'S'、 'a'          | 字符串                           | np.dtype('S5')                   |
+| 'U'                | Unicode 编码字符串               | np.dtype('U') == np.str_         |
+| 'V'                | 原生数据， raw data（空， void） | np.dtype('V') == np.void         |
+
+`NumPy`中还可以定义更高级的复合数据类型。
+
+```python
+# 每个数据都包含了一个3x3的矩阵
+In[6]: tp = np.dtype([('id', 'i8'), ('mat', 'f8', (3, 3))])
+In[7]: x = np.zeros(1, dtype=tp)
+In[8]: x[0]
+Out[8]: (0, [[0., 0., 0.], [0., 0., 0.], [0., 0., 0.]])
+```
+
+### 记录数组
+
+`np.recarray  `类同结构化数组，但是可以通过属性的方式获取相应数据(会带来一些额外开销)。
+
+```python
+In[2]: import numpy as np
+In[3]: data = np.zeros(4,dtype={'names':('name','age','weight'),"formats":('U10',"i4",'f8')})
+In[4]: name = ['Alice', 'Bob', 'Cathy', 'Doug']
+In[5]: age = [25, 45, 37, 19]
+In[6]: weight = [55.0, 85.5, 68.0, 61.5]
+In[7]: data['age'] = age
+In[8]: data['name'] = name
+In[9]: data['weight'] = weight
+In[10]: data['age']
+Out[10]: array([25, 45, 37, 19])
+In[11]: data_rec = data.view(np.recarray)
+In[12]: data_rec.age
+Out[12]: array([25, 45, 37, 19])
+```
+
